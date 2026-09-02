@@ -2,11 +2,13 @@
 
 ## GitHub Pages
 
-The repository's existing Pages workflow publishes static content from the default
-branch. This section requires no server, environment variable, secret, API key, or
-workflow change and is available beneath:
+The repository's Pages workflow (`.github/workflows/pages.yml`) runs the unit and
+browser tests on every push to the default branch and then publishes the
+application, which lives at the repository root, to:
 
-`/work/black-hat-agent/`
+`https://azjester.github.io/Black_Hat_Agent/`
+
+No server, environment variable, secret, or API key is required.
 
 Deploying these files does not create an AI service. Analysis remains deterministic
 and is performed entirely in the visitor's browser.
@@ -15,10 +17,10 @@ and is performed entirely in the visitor's browser.
 
 Excel import uses the repository-bundled SheetJS CE 0.20.3 browser distribution
 under the Apache-2.0 license. The application must load this checked-in asset from
-`black-hat-agent/vendor/`; do not replace it with a CDN reference. Keep the vendored
+`vendor/`; do not replace it with a CDN reference. Keep the vendored
 license and version record with the distribution, and review functionality, license,
 and security impact before upgrading the library. Keep
-`black-hat-agent/spreadsheet-worker.js` alongside the application: Excel parsing is
+`spreadsheet-worker.js` alongside the application: Excel parsing is
 required to run in that same-origin, time-limited worker.
 
 ## Local verification
@@ -29,7 +31,7 @@ From the repository root:
 python -m http.server 8000
 ```
 
-Open `http://localhost:8000/black-hat-agent/`. Test through an HTTP origin
+Open `http://localhost:8000/`. Test through an HTTP origin
 rather than by double-clicking `index.html`; download, print, and browser-storage
 behavior can differ for `file:` URLs.
 

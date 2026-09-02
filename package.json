@@ -1,0 +1,16 @@
+{
+  "name": "black-hat-agent",
+  "private": true,
+  "type": "module",
+  "description": "Anonymous, browser-only competitive assessment and Black Hat facilitation workspace.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

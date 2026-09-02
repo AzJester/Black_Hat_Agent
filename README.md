@@ -4,7 +4,7 @@ A public, anonymous, browser-only workspace for structured competitive analysis 
 Black Hat facilitation. It turns information entered by a capture team into
 evidence-cited scorecards, challenge themes, actions, and versioned reports.
 
-**Live path:** `https://azjester.github.io/work/black-hat-agent/`
+**Live path:** `https://azjester.github.io/Black_Hat_Agent/`
 
 ## What works
 
@@ -93,7 +93,19 @@ From the repository root:
 python -m http.server 8000
 ```
 
-Then open `http://localhost:8000/black-hat-agent/`.
+Then open `http://localhost:8000/`.
+
+## Run the tests
+
+The unit tests use the Node.js test runner and need no dependencies. The browser
+tests use Playwright and serve the repository root locally.
+
+```powershell
+npm install
+npx playwright install chromium
+npm test
+npm run test:browser
+```
 
 ## Documentation
 

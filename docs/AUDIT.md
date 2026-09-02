@@ -9,6 +9,13 @@ under `black-hat-agent/docs/` and the READMEs were treated as claims to verify.
 
 **Date:** 2026-09-01
 
+**Repository note:** this audit was performed while the application shipped from the
+`black-hat-agent/` directory of the `AzJester/work` monorepo. The application has since
+moved to this standalone repository, where it lives at the repository root, so the
+file paths below are relative to that former directory (`black-hat-agent/app.js` is
+now `app.js`). Finding F3 concerned the monorepo's shared service worker and does not
+apply to this repository, which registers no service worker of its own.
+
 **Method:** whole-source static review across eight dimensions (HTML/SVG injection,
 spreadsheet + ZIP import safety, JSON-workspace import & prototype pollution,
 persistence/service-worker/recovery, CSP/privacy/supply-chain, analysis-engine
@@ -100,6 +107,9 @@ keeping the light `--sky` ring only for the dark sidebar; or add a double (outer
 outline so at least one edge clears 3:1.
 
 ### F3 — Sibling-app service worker silently controls this app’s path (Low)
+
+> **Not applicable in this repository.** See the repository note above; this finding
+> is retained as a record of the monorepo deployment that was audited.
 
 **Where:** repository-root `sw.js` (`navigationFallback` ~21–35, default tracker
 fallback at line 34; network-first navigate handler ~55–72; stale-while-revalidate
