@@ -4,6 +4,7 @@
 @media(max-width:520px){.metrics,.nav{grid-template-columns:1fr}.hero,.topbar{display:block}.actions{margin-top:12px}.content{padding:14px}}
 
 .skip-link{position:fixed;left:10px;top:-80px;z-index:100;background:#fff;color:var(--ink);padding:10px 14px;border-radius:8px}.skip-link:focus{top:10px}
+.skip-link:focus-visible{outline-offset:-4px}
 .save-state{display:block;color:var(--muted);font-size:10px;margin-top:2px}.toggle{display:flex;align-items:center;gap:7px;white-space:nowrap;padding:0 8px}.toggle input,.checkbox-field input{width:auto}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px}.note.warn{border-color:var(--warn);background:#fff8e8}.note.danger{border-color:var(--bad);background:#fff0f1}.tag{display:inline-flex;align-items:center;border-radius:999px;background:#eeeef2;color:#4c4c58;padding:3px 7px;font-size:9px;font-weight:800;letter-spacing:.07em}.tag.good{background:#e6f5ee;color:var(--good)}.tag.danger{background:#fce8ea;color:var(--bad)}.block{display:block;margin-top:5px;color:var(--muted)}
 .readiness{list-style:none;padding:0;margin:0 0 18px}.readiness li{padding:8px 0 8px 24px;border-bottom:1px solid var(--line);position:relative}.readiness li::before{content:"";position:absolute;left:2px;top:14px;width:9px;height:9px;border-radius:50%;background:var(--muted)}.readiness li.good::before{background:var(--good)}.readiness li.warn::before{background:var(--warn)}.readiness li.bad::before{background:var(--bad)}
@@ -32,7 +33,7 @@ dialog.import-dialog{width:min(1040px,calc(100% - 24px));max-width:1040px}.impor
 .nav button{display:block;width:100%;border:0;border-left:2px solid transparent;border-radius:7px;background:transparent;color:#d8d5df;padding:9px 12px;text-align:left;font-size:13px;font-weight:600;line-height:1.35;transition:background-color .16s ease,border-color .16s ease,color .16s ease}
 .nav button:hover{background:rgba(255,255,255,.06);color:#fff}
 .nav button.active{border-left-color:var(--sky);background:rgba(255,255,255,.1);color:#fff}
-.nav button:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+.nav button:focus-visible,.nav a:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
 .guardrail{border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.035);padding:13px;color:#bdb9c8;line-height:1.45}
 .guide-panel{padding:24px}
 .guide-steps{display:grid;gap:0;list-style:none;counter-reset:guide-step;margin:18px 0 0;padding:0}
@@ -59,7 +60,8 @@ button,input,select,textarea{max-width:100%}
 button:disabled,[aria-disabled="true"]{cursor:not-allowed}
 [hidden]{display:none!important}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
-:where(a,button,input,select,textarea,[tabindex]:not([tabindex="-1"])):focus-visible{outline:3px solid var(--sky);outline-offset:3px}
+:where(a,button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])):focus-visible{outline:3px solid var(--purple);outline-offset:3px}
+.sidebar :focus-visible,.mobile-header :focus-visible{outline-color:var(--sky)}
 :where(.card,.panel,.metric,.field,.row,.actions,.hero,.table-wrap,.report-document,.visual-card){min-width:0}
 :where(h1,h2,h3,h4,p,li,td,th,label,button,a,.pill,.tag,.citation){overflow-wrap:anywhere}
 

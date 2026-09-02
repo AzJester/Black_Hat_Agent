@@ -979,6 +979,7 @@ export function normalizeWorkspace(candidate, fallback) {
     priorEstimate: 50,
     archived: false,
     ...item,
+    priorEstimate: clampPriorEstimate(item.priorEstimate),
     archived: Boolean(item.archived)
   }));
   workspace.criteria = workspace.criteria.map(item => ({
@@ -1754,12 +1755,27 @@ function priorityRank(value) {
   return { Critical: 0, High: 1, Medium: 2, Low: 3 }[value] ?? 4;
 }
 
+function clampPriorEstimate(value) {
+  // Only primitives are coerced: an imported object (e.g. {"toString": 1} from a
+  // hostile workspace file) would throw inside Number()/String(), so it defaults.
+  if (typeof value === "string") {
+    if (value.trim() === "") return 50;
+  } else if (typeof value !== "number" && typeof value !== "boolean") {
+    return 50;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 50;
+  return Math.max(5, Math.min(95, number));
+}
+
 function calculateScenarioEstimate(priorValue, margin, criticalGateGaps, coverage, confidence) {
-  const prior = Math.max(0.05, Math.min(0.95, Number(priorValue || 50) / 100));
+  const prior = Math.max(0.05, Math.min(0.95, clampPriorEstimate(priorValue) / 100));
   const logit = Math.log(prior / (1 - prior));
   const raw = 1 / (1 + Math.exp(-(logit + 0.035 * margin - 0.4 * criticalGateGaps)));
-  const trust = (coverage / 100) * (confidence / 100);
-  const estimate = prior + (raw - prior) * trust;
+  const trustRaw = (coverage / 100) * (confidence / 100);
+  const trust = Number.isFinite(trustRaw) ? Math.max(0, Math.min(1, trustRaw)) : 0;
+  const shifted = prior + (raw - prior) * trust;
+  const estimate = Number.isFinite(shifted) ? shifted : prior;
   const value = Math.max(5, Math.min(95, Math.round((estimate * 100) / 5) * 5));
   const uncertainty = Math.round((10 + (1 - trust) * 25) / 5) * 5;
   return {

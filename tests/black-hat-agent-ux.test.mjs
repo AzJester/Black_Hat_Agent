@@ -9,7 +9,7 @@ const rootDir = resolve(testDir, "..");
 const styles = readFileSync(resolve(rootDir, "styles.css"), "utf8");
 
 test("the application shell exposes accessible focus, touch, and status states", () => {
-  assert.match(styles, /:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--sky\)/s);
+  assert.match(styles, /:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--purple\)/s);
   assert.match(styles, /\.sr-only\s*\{/);
   assert.match(styles, /\.btn,[^{]*\.nav a[^{]*\{[^}]*min-height:\s*44px/s);
   assert.match(styles, /\.field label,[^{]*\{[^}]*font-size:\s*12px/s);

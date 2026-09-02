@@ -64,10 +64,13 @@ process.
 - Spreadsheet imports are limited to 2,000 data rows, 100 columns, 100,000 total
   cells, and 10,000 characters per cell to constrain browser resource use and
   oversized input.
-- ZIP-based Excel files are preflighted before parsing: expanded data is limited to
-  50 MB total and 20 MB per entry, with at most 2,000 ZIP entries. ZIP64 and
-  encrypted workbooks are rejected. All Excel workbooks are limited to 50
-  worksheets and a 20-second worker lifetime.
+- ZIP-based Excel files are preflighted before parsing. The central directory is
+  checked structurally (at most 2,000 entries; ZIP64 and encrypted workbooks are
+  rejected), and then every entry is actually inflated through a byte-counting
+  decompressor before SheetJS sees the file, aborting as soon as expanded data
+  exceeds 50 MB in total or 20 MB for one entry. Declared sizes in the ZIP headers
+  are treated as untrusted hints, not as the limit. All Excel workbooks are limited
+  to 50 worksheets and a 20-second worker lifetime.
 - Hidden and very hidden worksheets are unavailable. A selected worksheet with a
   hidden row or column in the imported range is rejected.
 - The user selects a worksheet and header row, then reviews automatic or manual

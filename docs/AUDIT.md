@@ -53,6 +53,24 @@ offline-correctness, or hardening polish.
 | F8 | Info | Concurrency | Cross-tab concurrent edits are last-writer-wins, warned only by a transient toast |
 | F9 | Info | Accessibility | The persistent “Unsaved changes” indicator is not an ARIA live region |
 
+### Remediation status
+
+Every applicable finding has been fixed in this repository; each fix ships with
+regression tests (unit and/or Playwright) and was adversarially reviewed before
+landing.
+
+| # | Status | Fix |
+|---|--------|-----|
+| F1 | Fixed | All attachment reads run before any collection is mutated (`readEvidenceAttachment`); a rejected read restores the previous state, and the submit dispatcher rolls back to the last persisted workspace on any throw. |
+| F2 | Fixed | The global focus ring is `--purple` (≈11:1 on light surfaces); dark surfaces keep the `--sky` ring; the skip link draws its ring inside its own pill. |
+| F3 | Not applicable | This repository registers no service worker. |
+| F4 | Fixed | The worker measures real inflation with a byte-counting `DecompressionStream("deflate-raw")` before SheetJS parses, aborting past the 50 MB / 20 MB ceilings; declared sizes remain only a fast-reject. |
+| F5 | Fixed | `priorEstimate` is coerced to a finite number in [5, 95] at normalization and in the scenario estimate; the report can no longer print `NaN`. |
+| F6 | Fixed | A frame-buster runs at module init; when framed, no render path (startup, navigation, cross-tab refresh, or a pushed fragment change) renders the app. |
+| F7 | Fixed | Search and list-filter re-renders restore the real caret, selection, and scroll position. |
+| F8 | Fixed | A clean tab adopts another tab’s saved workspace through the validated load path; a tab with unsaved edits freezes behind a persistent banner and `save()` refuses to overwrite; an import plan built before a cross-tab refresh is refused until re-validated. |
+| F9 | Fixed | The save-state indicator is an atomic live region (polite; assertive for errors and the stale-tab warning). |
+
 ## Findings
 
 ### F1 — Attachment-read failure can discard the entire local workspace (Medium)

@@ -91,6 +91,28 @@ const NAV_GROUPS = [
 ];
 const VIEW_LABELS = Object.fromEntries(NAV_GROUPS.flatMap(group => group.entries));
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const STALE_WORKSPACE_MESSAGE =
+  "This workspace changed in another tab. Reload this page before saving; your unsaved edits here were not stored.";
+const IMPORT_PLAN_STALE_MESSAGE =
+  "This workspace changed in another tab after the import was validated. Go back to Map columns and choose Validate and review again so the import is rebuilt against the current workspace.";
+const FRAMED_MESSAGE =
+  "Black Hat Agent cannot run inside another page. Open it directly in its own browser tab.";
+
+// Defense-in-depth frame-buster (audit F6). The CSP is delivered by <meta>, where
+// frame-ancestors is ignored, so a hostile page could frame the app. When framed we
+// try to break out to the top window; whether that navigation throws (a sandboxed
+// cross-origin host) or is silently refused by the browser, the app never renders
+// inside the frame. A no-op when the page is the top-level window.
+function bustHostileFrame() {
+  if (window.top === window.self) return false;
+  try {
+    window.top.location = window.self.location;
+  } catch (error) {
+    // The host forbids top navigation; the refusal message below is all that renders.
+  }
+  return true;
+}
+const frameBlocked = bustHostileFrame();
 
 const seed = {
   schemaVersion: SCHEMA_VERSION,
@@ -446,6 +468,11 @@ let navOpen = false;
 let workspaceMenuOpen = false;
 let dirtyForm = false;
 let saveError = "";
+let staleWorkspace = false;
+// The in-memory workspace the open import wizard built its plan from (audit F8). The
+// wizard dialog lives outside #app and survives a cross-tab refresh, so a plan derived
+// from a workspace this tab no longer holds must be refused rather than applied.
+let importPlanBaseline = null;
 let modalTrigger = null;
 const listState = Object.fromEntries(
   ["criteria", "evidence", "competitors", "actions"].map(name => [
@@ -478,6 +505,14 @@ function loadWorkspace() {
 
 function save() {
   const previous = structuredClone(lastPersistedData);
+  if (staleWorkspace) {
+    // Another tab persisted a fresher workspace while this tab held unsaved edits.
+    // Refuse to overwrite it: a stale tab must never clobber a fresher one (audit F8).
+    data = previous;
+    saveError = STALE_WORKSPACE_MESSAGE;
+    toast(saveError, "error");
+    return false;
+  }
   data.updatedAt = new Date().toISOString();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -501,20 +536,84 @@ function save() {
 
 function saveStateText() {
   if (saveError) return saveError;
+  if (staleWorkspace) return STALE_WORKSPACE_MESSAGE;
   if (dirtyForm) return "Unsaved changes";
   return `Saved locally · schema v${SCHEMA_VERSION}`;
+}
+
+function saveStateClass() {
+  if (saveError || staleWorkspace) return "error";
+  return dirtyForm ? "dirty" : "";
+}
+
+// The indicator is an ARIA live region (audit F9): polite for routine transitions,
+// assertive when it carries a save error or the stale-tab warning.
+function saveStateLive() {
+  return saveError || staleWorkspace ? "assertive" : "polite";
+}
+
+function saveStateIndicator() {
+  return `<span class="save-state ${saveStateClass()}" role="status" aria-live="${saveStateLive()}" aria-atomic="true">${esc(
+    saveStateText()
+  )}</span>`;
+}
+
+function refreshSaveState() {
+  const indicator = document.querySelector(".save-state");
+  if (!indicator) return;
+  indicator.textContent = saveStateText();
+  indicator.classList.toggle("dirty", saveStateClass() === "dirty");
+  indicator.classList.toggle("error", saveStateClass() === "error");
+  indicator.setAttribute("aria-live", saveStateLive());
 }
 
 function markDirty() {
   if (dirtyForm) return;
   dirtyForm = true;
   saveError = "";
-  const indicator = document.querySelector(".save-state");
-  if (indicator) {
-    indicator.textContent = saveStateText();
-    indicator.classList.add("dirty");
-    indicator.classList.remove("error");
+  refreshSaveState();
+}
+
+function staleBanner() {
+  if (!staleWorkspace) return "";
+  return `<div class="note warn stale-banner" role="alert"><strong>Workspace changed in another tab.</strong> ${esc(
+    "Saving from this tab is paused so the newer copy is not overwritten. Reload to pick up the latest workspace; unsaved edits on this page will be discarded."
+  )} <button class="btn small" type="button" data-action="reload-workspace">Reload</button></div>`;
+}
+
+function showStaleBanner() {
+  if (document.querySelector(".stale-banner")) return;
+  document.querySelector(".main")?.insertAdjacentHTML("afterbegin", staleBanner());
+}
+
+// Cross-tab refresh (audit F8): adopt the workspace another tab just persisted, via the
+// same validated load path used at startup. Never replaces good in-memory data with the
+// seed: if the stored copy fails validation this tab keeps what it has and reports it.
+function adoptExternalWorkspace() {
+  const previousWarning = startupWarning;
+  startupWarning = "";
+  const next = loadWorkspace();
+  const problem = startupWarning;
+  startupWarning = previousWarning;
+  if (problem) {
+    toast("The workspace changed in another tab but the stored copy could not be loaded.", "error");
+    return false;
   }
+  data = next;
+  lastPersistedData = structuredClone(next);
+  dirtyForm = false;
+  saveError = "";
+  staleWorkspace = false;
+  render();
+  // An open import wizard survives the re-render, but its plan was built from the
+  // workspace just replaced; applySpreadsheetImport() refuses that plan until it is
+  // validated again against the adopted copy.
+  toast(
+    document.querySelector("#localImportWizard")
+      ? "Workspace updated from another tab. Validate the import again before applying it."
+      : "Workspace updated from another tab."
+  );
+  return true;
 }
 
 function confirmDiscardChanges() {
@@ -720,9 +819,7 @@ function header() {
   return `<header class="topbar">
     <div class="active-context"><p class="eyebrow">ACTIVE PURSUIT</p><strong>${esc(
       active?.name || "No pursuit selected"
-    )}</strong><span class="save-state ${dirtyForm ? "dirty" : saveError ? "error" : ""}">${esc(
-      saveStateText()
-    )}</span></div>
+    )}</strong>${saveStateIndicator()}</div>
     <div class="workspace-actions">
       <span class="pill">LOCAL · NO SIGN-IN</span>
       <div class="workspace-menu-shell">
@@ -1469,6 +1566,13 @@ function navigateTo(nextView, { historyMode = "push", focus = true } = {}) {
 }
 
 function render() {
+  // A framed document never renders the app, whichever path asks for it: startup,
+  // navigation, a cross-tab refresh, or a fragment change pushed in by the host page
+  // (audit F6). The plain-text refusal is the only thing a frame ever shows.
+  if (frameBlocked) {
+    document.querySelector("#app").textContent = FRAMED_MESSAGE;
+    return;
+  }
   const views = {
     portfolio,
     command,
@@ -1486,7 +1590,7 @@ function render() {
     guide: guideView
   };
   if (!views[view]) view = "portfolio";
-  document.querySelector("#app").innerHTML = `<a class="skip-link" href="#content">Skip to content</a><div class="app">${nav()}<main class="main">${header()}<div class="content" id="content" tabindex="-1">${views[
+  document.querySelector("#app").innerHTML = `<a class="skip-link" href="#content">Skip to content</a><div class="app">${nav()}<main class="main">${staleBanner()}${header()}<div class="content" id="content" tabindex="-1">${views[
     view
   ]()}</div><div class="footer-note">Browser-only application · Deterministic analysis · Export backups regularly.</div></main></div><dialog id="modal" aria-modal="true" aria-labelledby="modal-title"></dialog>`;
   document.title = `${VIEW_LABELS[view] || "Black Hat Agent"} · Black Hat Agent`;
@@ -2018,6 +2122,12 @@ function duplicatePursuit(id) {
 }
 
 function applySpreadsheetImport(nextWorkspace, details) {
+  // The wizard's plan is a full workspace derived from getWorkspace() at the mapping
+  // step. Refuse it when this tab may no longer hold that workspace (audit F8): the
+  // tab froze behind the stale banner, or a cross-tab refresh replaced the in-memory
+  // copy after the plan was built. Validating the mapping again rebuilds the plan.
+  if (staleWorkspace) throw new Error(STALE_WORKSPACE_MESSAGE);
+  if (importPlanBaseline !== data) throw new Error(IMPORT_PLAN_STALE_MESSAGE);
   const previous = structuredClone(data);
   const backup = makeSnapshot(`Before importing ${details.label || details.target}`);
   const normalized = normalizeWorkspace(nextWorkspace, seed);
@@ -2045,6 +2155,29 @@ function applySpreadsheetImport(nextWorkspace, details) {
   navigateTo(nextView);
 }
 
+// Reads every byte of an evidence attachment up front (audit F1). It runs before any
+// workspace collection is touched, so a rejected FileReader or text() read can never
+// leave a reciprocal link pointing at a record that was never added.
+async function readEvidenceAttachment(file) {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return { error: "Attachment is too large. The maximum attachment size is 300 KB." };
+  }
+  const attachmentType =
+    ATTACHMENT_MIME_BY_EXTENSION[file.name.split(".").pop()?.toLowerCase()] || "";
+  if (!attachmentType) {
+    return { error: "Choose a TXT, Markdown, CSV, JSON, PDF, DOC, or DOCX attachment." };
+  }
+  const attachmentData = String(await readDataUrl(file)).replace(
+    /^data:[^;,]+/i,
+    `data:${attachmentType}`
+  );
+  if (!safeAttachmentDataUrl(attachmentData)) {
+    return { error: "The selected attachment could not be encoded safely." };
+  }
+  const excerpt = isTextDocument(file) ? String(await file.text()).slice(0, 4000) : "";
+  return { attachmentName: file.name, attachmentType, attachmentData, excerpt };
+}
+
 async function handleRecordSubmit(form) {
   const previous = structuredClone(data);
   const kind = form.dataset.kind;
@@ -2053,6 +2186,31 @@ async function handleRecordSubmit(form) {
   const formData = new FormData(form);
   const record = { ...Object.fromEntries(formData), id: recordId || uid() };
   delete record.attachment;
+
+  // All awaited work happens here, before any collection is mutated. Everything after
+  // this block is synchronous, so the reciprocal links and the record are committed
+  // together or not at all.
+  let attachment = null;
+  const file = kind === "evidence" ? form.elements.attachment?.files?.[0] : null;
+  if (file) {
+    try {
+      attachment = await readEvidenceAttachment(file);
+    } catch (error) {
+      data = previous;
+      toast(
+        `The attachment could not be read, so the record was not saved: ${
+          error?.message || "Unknown file error."
+        }`,
+        "error"
+      );
+      return false;
+    }
+    if (attachment.error) {
+      data = previous;
+      alert(attachment.error);
+      return false;
+    }
+  }
 
   if (kind !== "playbooks") record.pursuitId = data.active;
   if (kind === "pursuits") {
@@ -2082,34 +2240,12 @@ async function handleRecordSubmit(form) {
     record.attachmentName = existing.attachmentName || "";
     record.attachmentType = existing.attachmentType || "";
     record.attachmentData = existing.attachmentData || "";
-    const file = form.elements.attachment?.files?.[0];
-    if (file) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        data = previous;
-        alert("Attachment is too large. The public browser edition allows a maximum of 300 KB.");
-        return false;
-      }
-      const attachmentType =
-        ATTACHMENT_MIME_BY_EXTENSION[file.name.split(".").pop()?.toLowerCase()] || "";
-      if (!attachmentType) {
-        data = previous;
-        alert("Choose a TXT, Markdown, CSV, JSON, PDF, DOC, or DOCX attachment.");
-        return false;
-      }
-      record.attachmentName = file.name;
-      record.attachmentType = attachmentType;
-      record.attachmentData = String(await readDataUrl(file)).replace(
-        /^data:[^;,]+/i,
-        `data:${attachmentType}`
-      );
-      if (!safeAttachmentDataUrl(record.attachmentData)) {
-        data = previous;
-        alert("The selected attachment could not be encoded safely.");
-        return false;
-      }
-      if (isTextDocument(file)) {
-        const excerpt = await file.text();
-        if (!record.note.trim()) record.note = excerpt.slice(0, 4000);
+    if (attachment) {
+      record.attachmentName = attachment.attachmentName;
+      record.attachmentType = attachment.attachmentType;
+      record.attachmentData = attachment.attachmentData;
+      if (attachment.excerpt && !String(record.note || "").trim()) {
+        record.note = attachment.excerpt;
       }
     }
   }
@@ -2235,6 +2371,12 @@ document.addEventListener("click", async event => {
     setWorkspaceMenuOpen(!workspaceMenuOpen);
     return;
   }
+  if (actionControl?.dataset.action === "reload-workspace") {
+    if (!confirmDiscardChanges()) return;
+    dirtyForm = false;
+    location.reload();
+    return;
+  }
   const button = event.target.closest("button");
   if (!button) {
     if (workspaceMenuOpen && !event.target.closest(".workspace-menu-shell")) {
@@ -2339,7 +2481,10 @@ document.addEventListener("click", async event => {
     setWorkspaceMenuOpen(false);
     openLocalImportWizard({
       trigger: button,
-      getWorkspace: () => data,
+      getWorkspace: () => {
+        importPlanBaseline = data;
+        return data;
+      },
       activePursuit: pursuit(),
       idFactory: uid,
       validator: validateWorkspace,
@@ -2433,25 +2578,52 @@ document.addEventListener("click", async event => {
   }
 });
 
+// Caret preservation across a full re-render (audit F7): render() recreates the search
+// inputs, so the real selection and horizontal scroll are captured first and restored
+// on the replacement element instead of forcing the caret to the end of the value.
+function captureInputState(input) {
+  return {
+    start: input.selectionStart,
+    end: input.selectionEnd,
+    direction: input.selectionDirection || "none",
+    scrollLeft: input.scrollLeft
+  };
+}
+
+function restoreInputState(input, state) {
+  if (!input) return;
+  input.focus();
+  if (!state || typeof state.start !== "number" || typeof state.end !== "number") return;
+  const max = input.value.length;
+  try {
+    input.setSelectionRange(
+      Math.min(state.start, max),
+      Math.min(state.end, max),
+      state.direction
+    );
+  } catch (error) {
+    // Some input types refuse selection APIs; keeping focus is enough there.
+  }
+  input.scrollLeft = state.scrollLeft;
+}
+
 document.addEventListener("input", event => {
   if (event.target.dataset.listFilter) {
     const collection = event.target.dataset.listFilter;
     const state = listState[collection];
     if (!state) return;
+    const caret = captureInputState(event.target);
     state.query = event.target.value;
     state.page = 1;
     render();
-    const input = document.querySelector(`[data-list-filter="${collection}"]`);
-    input?.focus();
-    input?.setSelectionRange(state.query.length, state.query.length);
+    restoreInputState(document.querySelector(`[data-list-filter="${collection}"]`), caret);
     return;
   }
   if (event.target.id === "search") {
+    const caret = captureInputState(event.target);
     query = event.target.value;
     render();
-    const search = document.querySelector("#search");
-    search?.focus();
-    search?.setSelectionRange(query.length, query.length);
+    restoreInputState(document.querySelector("#search"), caret);
     return;
   }
   if (event.target.dataset.filterOptions) {
@@ -2512,7 +2684,20 @@ document.addEventListener("submit", async event => {
     }
   }
   if (type === "run") buildAndSaveReport(new FormData(form));
-  if (type === "record") await handleRecordSubmit(form);
+  if (type === "record") {
+    try {
+      await handleRecordSubmit(form);
+    } catch (error) {
+      // Never leave a half-applied record behind (audit F1): roll back to the last
+      // persisted workspace and surface the failure instead of an unhandled rejection.
+      data = structuredClone(lastPersistedData);
+      render();
+      toast(
+        `The record was not saved: ${error?.message || "Unexpected error."}`,
+        "error"
+      );
+    }
+  }
   if (type === "report-edit") {
     const formData = new FormData(form);
     if (
@@ -2535,9 +2720,17 @@ document.addEventListener("submit", async event => {
 });
 
 window.addEventListener("storage", event => {
-  if (event.key === STORAGE_KEY && event.newValue) {
-    toast("This workspace changed in another tab. Reload before making more edits.");
+  if (event.key !== STORAGE_KEY || !event.newValue || frameBlocked) return;
+  if (!dirtyForm && !staleWorkspace) {
+    adoptExternalWorkspace();
+    return;
   }
+  // This tab holds unsaved edits, so it cannot silently adopt the other tab's copy and
+  // must not overwrite it either. Freeze saving and keep a persistent banner in view.
+  staleWorkspace = true;
+  saveError = "";
+  refreshSaveState();
+  showStaleBanner();
 });
 
 window.addEventListener("beforeunload", event => {
@@ -2547,6 +2740,9 @@ window.addEventListener("beforeunload", event => {
 });
 
 window.addEventListener("popstate", () => {
+  // A hostile parent can push a fragment-only navigation into the frame, which fires
+  // popstate here without a reload (audit F6). Never let that render the app.
+  if (frameBlocked) return;
   const requestedView = location.hash.slice(1);
   if (!VIEW_LABELS[requestedView] || requestedView === view) return;
   if (!confirmDiscardChanges()) {
@@ -3052,6 +3248,10 @@ window.BlackHatApp = {
   exportPDF
 };
 
-history.replaceState({ view }, "", `#${view}`);
-render();
-if (startupWarning) toast(startupWarning, "error");
+if (frameBlocked) {
+  document.querySelector("#app").textContent = FRAMED_MESSAGE;
+} else {
+  history.replaceState({ view }, "", `#${view}`);
+  render();
+  if (startupWarning) toast(startupWarning, "error");
+}
