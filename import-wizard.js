@@ -290,7 +290,7 @@ export function downloadImportTemplate() {
     ["Keep the first row as column headers, or select a different header row in the wizard."],
     ["Required fields must contain a value on every imported row."],
     ["References use existing criterion names, evidence citations/titles, and competitor names."],
-    ["Files are parsed locally. Do not include controlled or classified information."],
+    ["Files are parsed locally in the browser."],
     ["Macros, formula code, and external workbook links are never executed."]
   ]);
   instructions["!cols"] = [{ wch: 105 }];

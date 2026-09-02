@@ -108,7 +108,7 @@ const seed = {
       owner: "Shane Turner",
       review: "2026-08-06",
       decisionDate: "2026-11-15",
-      contractValue: "Synthetic demonstration",
+      contractValue: "Demonstration",
       playbook: "Opportunity competitive assessment",
       summary:
         "Integrate credible test planning, digital engineering, and mission-thread analysis across domains.",
@@ -128,7 +128,7 @@ const seed = {
       owner: "Capture Team",
       review: "2026-09-18",
       decisionDate: "",
-      contractValue: "Synthetic demonstration",
+      contractValue: "Demonstration",
       playbook: "Customer evaluator simulation",
       summary:
         "Position mission engineering depth and execution confidence for a complex services opportunity.",
@@ -146,7 +146,7 @@ const seed = {
       owner: "Growth Team",
       review: "2026-10-03",
       decisionDate: "",
-      contractValue: "Synthetic demonstration",
+      contractValue: "Demonstration",
       playbook: "Recompete and incumbent defense",
       summary:
         "Assess transition risk, incumbent advantages, and modernization discriminators.",
@@ -231,7 +231,7 @@ const seed = {
       weight: 50,
       ourScore: 4,
       classification: "Inference",
-      rationale: "Synthetic industry-day evidence indicates strong customer relevance.",
+      rationale: "Industry-day evidence indicates strong customer relevance.",
       evidenceIds: ["e3"],
       isGate: true
     },
@@ -281,7 +281,7 @@ const seed = {
       pursuitId: "p1",
       citation: "E-001",
       title: "Draft acquisition objectives",
-      source: "Synthetic customer brief",
+      source: "Customer brief",
       url: "",
       type: "Customer",
       publishedAt: "2026-07-10",
@@ -300,7 +300,7 @@ const seed = {
       pursuitId: "p1",
       citation: "E-002",
       title: "Public capability statement",
-      source: "Synthetic market material",
+      source: "Market material",
       url: "",
       type: "Competitor",
       publishedAt: "2026-06-12",
@@ -319,7 +319,7 @@ const seed = {
       pursuitId: "p2",
       citation: "E-001",
       title: "Mission engineering priorities",
-      source: "Synthetic industry day",
+      source: "Industry day",
       url: "",
       type: "Customer",
       publishedAt: "2026-07-02",
@@ -1109,7 +1109,7 @@ function importsView() {
         <li>Only mapped cell values are retained; the original workbook is discarded.</li>
         <li>A recovery snapshot is created immediately before a successful import.</li>
       </ul>
-      <p class="note warn">Imported values are stored in this browser and included in workspace backups. Do not use this public edition for controlled or classified information.</p>
+      <p class="note">Imported values are stored in this browser and included in workspace backups.</p>
     </section>
   </div>
   <section class="panel">
@@ -1233,7 +1233,6 @@ function guideView() {
       <p class="eyebrow">BACKUP AND PRIVACY</p>
       <h2>Protect the work stored in this browser</h2>
       <p>There is no sign-in. Workspace data remains in this browser profile, so clearing site data can remove it. Export a dated workspace backup before major sessions or bulk changes.</p>
-      <p>Use only synthetic, public, or otherwise approved information in this public edition. Browser storage is not an enterprise security boundary.</p>
       <div class="row">
         <button class="btn small" type="button" data-action="export">Export workspace</button>
         <button class="btn small" type="button" data-view="recovery">Open Recovery</button>
@@ -1489,7 +1488,7 @@ function render() {
   if (!views[view]) view = "portfolio";
   document.querySelector("#app").innerHTML = `<a class="skip-link" href="#content">Skip to content</a><div class="app">${nav()}<main class="main">${header()}<div class="content" id="content" tabindex="-1">${views[
     view
-  ]()}</div><div class="footer-note">Public browser-only application · Synthetic sample data · Deterministic analysis · Export backups regularly.</div></main></div><dialog id="modal" aria-modal="true" aria-labelledby="modal-title"></dialog>`;
+  ]()}</div><div class="footer-note">Browser-only application · Deterministic analysis · Export backups regularly.</div></main></div><dialog id="modal" aria-modal="true" aria-labelledby="modal-title"></dialog>`;
   document.title = `${VIEW_LABELS[view] || "Black Hat Agent"} · Black Hat Agent`;
 }
 
@@ -2312,13 +2311,13 @@ document.addEventListener("click", async event => {
     }
   }
   if (button.dataset.action === "reset-demo") {
-    if (confirm("Replace the current workspace with the synthetic demonstration?")) {
+    if (confirm("Replace the current workspace with the demonstration workspace?")) {
       const backup = makeSnapshot("Before resetting demo");
       data = normalizeWorkspace(seed, seed);
       data.snapshots.push(backup);
       if (save()) {
         navigateTo("portfolio");
-        toast("Synthetic demo restored");
+        toast("Demonstration workspace restored");
       } else {
         render();
       }
@@ -2576,7 +2575,7 @@ document.addEventListener("keydown", event => {
 
 async function importWorkspaceFile(file) {
   if (file.size > MAX_IMPORT_BYTES) {
-    alert("Workspace file is too large. The public edition accepts JSON files up to 10 MB.");
+    alert("Workspace file is too large. JSON files up to 10 MB are accepted.");
     return;
   }
   try {
@@ -2971,7 +2970,7 @@ function classificationTag(value) {
       : lower.includes("conflict") || lower.includes("missing")
         ? "danger"
         : "";
-  return `<span class="tag ${style}">${esc(value || "Unclassified")}</span>`;
+  return `<span class="tag ${style}">${esc(value || "Unassessed")}</span>`;
 }
 
 function scoreCell(value) {

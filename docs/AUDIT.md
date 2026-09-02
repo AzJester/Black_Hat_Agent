@@ -10,11 +10,13 @@ under `black-hat-agent/docs/` and the READMEs were treated as claims to verify.
 **Date:** 2026-09-01
 
 **Repository note:** this audit was performed while the application shipped from the
-`black-hat-agent/` directory of the `AzJester/work` monorepo. The application has since
-moved to this standalone repository, where it lives at the repository root, so the
-file paths below are relative to that former directory (`black-hat-agent/app.js` is
-now `app.js`). Finding F3 concerned the monorepo's shared service worker and does not
-apply to this repository, which registers no service worker of its own.
+`black-hat-agent/` directory of the `AzJester/work` monorepo. This standalone
+repository was created from that directory with its history; the copy in
+`AzJester/work` remains and is maintained separately. Here the application lives at
+the repository root, so the file paths below are relative to that former directory
+(`black-hat-agent/app.js` is `app.js` here). Finding F3 concerned the monorepo's shared
+service worker and does not apply to this repository, which registers no service
+worker of its own.
 
 **Method:** whole-source static review across eight dimensions (HTML/SVG injection,
 spreadsheet + ZIP import safety, JSON-workspace import & prototype pollution,
