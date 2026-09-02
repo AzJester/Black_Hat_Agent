@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { loadDemoWorkspace } from "./helpers.mjs";
 
 // Regression checks derived from the independent audit (docs/AUDIT.md): the
 // application must make no third-party requests, and hostile text stored in the
@@ -43,11 +44,8 @@ test("hostile workspace text renders as escaped data in every view and a generat
   page.on("dialog", dialog => dialog.accept().catch(() => {})); // accept the native reset confirm()
   context.on("page", popup => { popup.close().catch(() => {}); }); // close any print/export popup
 
-  // The seed workspace lives in memory until a save; "Reset demo" persists it.
-  await page.goto(APP, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(300);
-  await page.locator('[data-action="reset-demo"]').first().click();
-  await page.waitForTimeout(400);
+  // The application starts empty; loading the demonstration persists a full workspace.
+  await loadDemoWorkspace(page);
 
   const stored = await page.evaluate(key => localStorage.getItem(key), STORAGE_KEY);
   expect(stored, "the demo workspace was persisted").not.toBeNull();

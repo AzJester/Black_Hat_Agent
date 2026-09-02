@@ -134,7 +134,10 @@ derived total or ranking is a deterministic summary of those inputs.
   valid scores, and supported local attachment encodings.
 - Recoverable pre-import or pre-reset state.
 - Bounded local snapshots with list, restore, and cleanup behavior.
-- Synthetic starter workspace that demonstrates every major workflow.
+- A preserved copy of any stored workspace that cannot be read, downloadable or
+  discardable from Recovery, instead of silently replacing it.
+- An empty first launch, with an on-demand demonstration workspace that exercises
+  every major workflow.
 
 ### Experience
 
@@ -209,9 +212,13 @@ browser performs parsing, mapping, preview, and validation without a CDN, API, o
 upload. The tradeoffs are a larger static download, browser memory and storage
 limits, and no spreadsheet formula, macro, or external-link execution.
 
-### Synthetic defaults
+### Empty first launch and on-demand demonstration data
 
-Starter records demonstrate the workflow without representing real pursuit data.
+The application starts with an empty workspace so real work is never mixed with
+sample records. A demonstration workspace can be loaded on demand, after
+confirmation and behind a recovery snapshot. If a stored workspace cannot be read,
+the application keeps a copy of it for download from Recovery and starts empty
+rather than replacing the user's data with the demonstration.
 
 ## Out of scope for this public edition
 

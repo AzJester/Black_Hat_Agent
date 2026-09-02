@@ -1,13 +1,12 @@
 import { test, expect } from "@playwright/test";
-
-const APP_PATH = "./";
+import { APP_PATH, loadDemoWorkspace } from "./helpers.mjs";
 
 test("mobile navigation, URL history, and responsive visuals work together", async ({ page }) => {
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.message));
+  await loadDemoWorkspace(page);
   await page.setViewportSize({ width: 320, height: 760 });
   await page.goto(APP_PATH, { waitUntil: "domcontentloaded" });
-  await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "domcontentloaded" });
 
   await expect(page.getByRole("button", { name: "Menu", exact: true })).toBeVisible();
@@ -40,9 +39,7 @@ test("mobile navigation, URL history, and responsive visuals work together", asy
 test("forms protect unsaved work and reports export their saved visuals", async ({ page }) => {
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.message));
-  await page.goto(`${APP_PATH}#criteria`, { waitUntil: "domcontentloaded" });
-  await page.evaluate(() => localStorage.clear());
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await loadDemoWorkspace(page, { hash: "#criteria" });
 
   const addCriterion = page.getByRole("button", { name: "Add criterion", exact: true });
   await addCriterion.click();
@@ -90,9 +87,7 @@ test("forms protect unsaved work and reports export their saved visuals", async 
 test("legacy report text never receives visuals rebuilt from current workspace data", async ({
   page
 }) => {
-  await page.goto(`${APP_PATH}#session`, { waitUntil: "domcontentloaded" });
-  await page.evaluate(() => localStorage.clear());
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await loadDemoWorkspace(page, { hash: "#session" });
   await page.getByRole("button", { name: "Generate competitive analysis" }).click();
   await expect(
     page.getByRole("heading", { name: "Editable competitive-analysis reports" })
@@ -132,8 +127,13 @@ test("a browser-storage failure is visible and does not report success", async (
     };
   });
   await page.goto(APP_PATH, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Open workspace" }).first().click();
+  // Loading the demonstration is the first save on an empty workspace; it must fail
+  // visibly and leave the workspace empty rather than report success.
+  page.once("dialog", dialog => dialog.accept());
+  await page.locator('.portfolio-empty [data-action="load-demo"]').click();
   await expect(page.locator(".save-state")).toContainText("Browser storage is full");
   await expect(page.locator(".toast[role='alert']")).toContainText("Browser storage is full");
   await expect(page).toHaveURL(/#portfolio$/);
+  await expect(page.getByRole("heading", { name: "No pursuits yet" })).toBeVisible();
+  await expect(page.locator(".grid .card")).toHaveCount(0);
 });

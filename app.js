@@ -97,6 +97,20 @@ const IMPORT_PLAN_STALE_MESSAGE =
   "This workspace changed in another tab after the import was validated. Go back to Map columns and choose Validate and review again so the import is rebuilt against the current workspace.";
 const FRAMED_MESSAGE =
   "Black Hat Agent cannot run inside another page. Open it directly in its own browser tab.";
+// Where an unreadable stored workspace is set aside, exactly as stored, so a failed
+// load never discards the user's data. Read and written only through the guarded
+// helpers readUnreadableCopy(), preserveUnreadableCopy(), and discardUnreadableCopy().
+const UNREADABLE_KEY = `${STORAGE_KEY}_unreadable`;
+const UNREADABLE_KEPT_MESSAGE =
+  "The stored workspace could not be read, so it was not loaded and this workspace starts empty. A copy of the unreadable data was kept; open Recovery to download or discard it.";
+const UNREADABLE_NOT_KEPT_MESSAGE =
+  "The stored workspace could not be read, so it was not loaded and this workspace starts empty. A copy could not be kept because browser storage is full; open Recovery and download the stored data before saving anything, or the first save will overwrite it.";
+const STORAGE_UNAVAILABLE_MESSAGE =
+  "Browser storage could not be read. This workspace starts empty and may not be saved until storage is available.";
+// The unreadable stored value itself, held in memory for this session so Recovery can
+// still offer it for download when the copy could not be written to storage. It is
+// gone after a reload, but the original stays under STORAGE_KEY until the first save.
+let unreadableRaw = "";
 
 // Defense-in-depth frame-buster (audit F6). The CSP is delivered by <meta>, where
 // frame-ancestors is ignored, so a hostile page could frame the app. When framed we
@@ -481,13 +495,88 @@ const listState = Object.fromEntries(
   ])
 );
 
-function loadWorkspace() {
+// The workspace the application starts with: no pursuits or pursuit records, only
+// the built-in playbooks. It is built through normalizeWorkspace with the seed as the
+// defaults source, so it is always schema-valid, and it is never written to storage
+// on its own; the first save is the user's.
+function emptyWorkspace() {
+  const now = new Date().toISOString();
+  return normalizeWorkspace(
+    {
+      schemaVersion: SCHEMA_VERSION,
+      createdAt: now,
+      updatedAt: now,
+      active: "",
+      pursuits: [],
+      criteria: [],
+      evidence: [],
+      competitors: [],
+      actions: [],
+      playbooks: structuredClone(seed.playbooks),
+      runs: [],
+      snapshots: []
+    },
+    seed
+  );
+}
+
+// The unreadable copy is data, never parsed as a workspace or rendered: the raw
+// string is kept verbatim beside the time it was set aside.
+function readUnreadableCopy() {
+  try {
+    const stored = localStorage.getItem(UNREADABLE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.raw !== "string" ||
+      typeof parsed.savedAt !== "string"
+    ) {
+      return null;
+    }
+    return { raw: parsed.raw, savedAt: parsed.savedAt };
+  } catch (error) {
+    return null;
+  }
+}
+
+// Keeps only the newest unreadable value. Re-reading the same unreadable value keeps
+// the original timestamp. Returns false when the copy could not be stored (quota).
+function preserveUnreadableCopy(raw) {
+  if (readUnreadableCopy()?.raw === raw) return true;
+  try {
+    localStorage.setItem(
+      UNREADABLE_KEY,
+      JSON.stringify({ savedAt: new Date().toISOString(), raw })
+    );
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function discardUnreadableCopy() {
+  try {
+    localStorage.removeItem(UNREADABLE_KEY);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Loads the stored workspace through validation. Nothing stored means the empty
+// first-launch workspace. A stored value that cannot be parsed or validated is never
+// replaced by the demonstration: it is set aside under the recovery key (unless the
+// caller only wants to inspect it, as the cross-tab refresh does) and the session
+// starts from the empty workspace with a startup warning.
+function loadWorkspace({ preserveUnreadable = true } = {}) {
   let raw = "";
   try {
     raw =
       localStorage.getItem(STORAGE_KEY) ||
       LEGACY_KEYS.map(key => localStorage.getItem(key)).find(Boolean);
-    if (!raw) return normalizeWorkspace(seed, seed);
+    if (!raw) return emptyWorkspace();
     const candidate = JSON.parse(raw);
     const importValidation = validateWorkspaceImport(candidate);
     if (!importValidation.valid) throw new Error(importValidation.errors.join("\n"));
@@ -496,10 +585,17 @@ function loadWorkspace() {
     if (!validation.valid) throw new Error(validation.errors.join("\n"));
     return normalized;
   } catch (error) {
-    startupWarning = raw
-      ? "The stored workspace failed validation and was not loaded. Restore a known-good JSON backup before saving new work."
-      : "The browser workspace could not be read. A fresh local demonstration was opened.";
-    return normalizeWorkspace(seed, seed);
+    if (!raw) {
+      startupWarning = STORAGE_UNAVAILABLE_MESSAGE;
+    } else if (!preserveUnreadable) {
+      startupWarning = UNREADABLE_KEPT_MESSAGE;
+    } else {
+      unreadableRaw = raw;
+      startupWarning = preserveUnreadableCopy(raw)
+        ? UNREADABLE_KEPT_MESSAGE
+        : UNREADABLE_NOT_KEPT_MESSAGE;
+    }
+    return emptyWorkspace();
   }
 }
 
@@ -581,24 +677,37 @@ function staleBanner() {
   )} <button class="btn small" type="button" data-action="reload-workspace">Reload</button></div>`;
 }
 
+// The startup warning stays in view until dismissed: a stored workspace that could not
+// be read is not something a 2.6 s toast should carry.
+function startupBanner() {
+  if (!startupWarning) return "";
+  return `<div class="note warn startup-banner" role="alert"><strong>Stored workspace not loaded.</strong> ${esc(
+    startupWarning
+  )} <button class="btn small" type="button" data-view="recovery">Open Recovery</button> <button class="btn small" type="button" data-action="dismiss-startup-warning">Dismiss</button></div>`;
+}
+
 function showStaleBanner() {
   if (document.querySelector(".stale-banner")) return;
   document.querySelector(".main")?.insertAdjacentHTML("afterbegin", staleBanner());
 }
 
 // Cross-tab refresh (audit F8): adopt the workspace another tab just persisted, via the
-// same validated load path used at startup. Never replaces good in-memory data with the
-// seed: if the stored copy fails validation this tab keeps what it has and reports it.
+// same validated load path used at startup. Never replaces good in-memory data: if the
+// stored copy fails validation this tab keeps what it has and reports it, and the
+// recovery key is left alone (the other tab's unreadable write is not this tab's data).
 function adoptExternalWorkspace() {
   const previousWarning = startupWarning;
   startupWarning = "";
-  const next = loadWorkspace();
+  const next = loadWorkspace({ preserveUnreadable: false });
   const problem = startupWarning;
   startupWarning = previousWarning;
   if (problem) {
     toast("The workspace changed in another tab but the stored copy could not be loaded.", "error");
     return false;
   }
+  // A good workspace arrived, so a startup warning about this tab's unreadable stored
+  // value no longer describes what is on screen; any set-aside copy stays in Recovery.
+  startupWarning = "";
   data = next;
   lastPersistedData = structuredClone(next);
   dirtyForm = false;
@@ -831,6 +940,7 @@ function header() {
           <button type="button" data-action="export">Export workspace JSON</button>
           <button type="button" data-action="tabular-import">Import Excel or CSV</button>
           <button type="button" data-action="import">Restore workspace JSON</button>
+          <button type="button" data-action="load-demo">Load demonstration workspace</button>
         </div>
       </div>
       <input id="importFile" type="file" accept=".json,application/json" aria-label="Restore workspace JSON" hidden>
@@ -861,11 +971,12 @@ function portfolio() {
     <label class="toggle"><input id="showArchived" type="checkbox" ${
       showArchived ? "checked" : ""
     }> Show archived</label>
-    <button class="btn" data-action="reset-demo">Reset demo</button>
   </div>
   <div class="grid">
     ${
-      visible
+      !data.pursuits.length
+        ? `<div class="empty-state portfolio-empty"><h2>No pursuits yet</h2><p>This workspace starts empty. Create a pursuit to begin your own analysis, or load the demonstration workspace to explore the workflow with example pursuits, criteria, evidence, and competitors.</p><div class="row"><button class="btn primary" type="button" data-action="new-pursuit">Create pursuit</button><button class="btn" type="button" data-action="load-demo">Load demonstration workspace</button></div></div>`
+        : visible
         .map(item => {
           const result = calculateCompetitiveScores(data, item.id);
           const openActions = data.actions.filter(
@@ -898,8 +1009,23 @@ function portfolio() {
   </div>`;
 }
 
+// Every pursuit-scoped view renders this when the workspace holds no pursuit: the
+// view's own heading stays, and the body is a single panel that points back to the
+// Pursuit Portfolio. `extra` adds view-specific controls that still make sense.
+function noPursuitPanel(eyebrow, title, description, extra = "") {
+  return `${sectionHero(eyebrow, title, description, "")}
+  <div class="empty-state no-pursuit"><h2>No pursuit selected</h2><p>This workspace has no open pursuit. Create a pursuit in the Pursuit Portfolio, or load the demonstration workspace there to explore this view.</p><div class="row"><button class="btn primary" type="button" data-view="portfolio">Open Pursuit Portfolio</button>${extra}</div></div>`;
+}
+
 function command() {
   const active = pursuit();
+  if (!active) {
+    return noPursuitPanel(
+      "COMMAND CENTER",
+      "Command Center",
+      "Readiness, ranked position, and scenario range for the open pursuit."
+    );
+  }
   const scores = calculateCompetitiveScores(data, active.id);
   const visuals = buildVisualizationSpecs(data, active.id, scores);
   const sourceReports = scoped("runs");
@@ -944,6 +1070,13 @@ function command() {
 
 function opportunity() {
   const active = pursuit();
+  if (!active) {
+    return noPursuitPanel(
+      "OPPORTUNITY",
+      "Opportunity profile",
+      "Maintain the framing assumptions used by every competitive report."
+    );
+  }
   return `<div class="hero"><div><p class="eyebrow">OPPORTUNITY</p><h1>Opportunity profile</h1><p>Maintain the framing assumptions used by every competitive report.</p></div></div>
   <form class="panel form-grid" data-form="opportunity">
     ${textField("name", "Opportunity name", active.name, true)}
@@ -963,6 +1096,13 @@ function opportunity() {
 }
 
 function criteriaView() {
+  if (!pursuit()) {
+    return noPursuitPanel(
+      "EVALUATION CRITERIA",
+      "Customer priorities and scoring",
+      "Weight the customer's decision criteria, record our score, and link each judgment to evidence."
+    );
+  }
   const rows = scoped("criteria");
   if (!listState.criteria.sort) listState.criteria.sort = "weight-desc";
   const result = pagedRecords(
@@ -1016,6 +1156,13 @@ function criteriaView() {
 }
 
 function evidenceView() {
+  if (!pursuit()) {
+    return noPursuitPanel(
+      "EVIDENCE ROOM",
+      "Source-linked evidence register",
+      "Treat each record as one atomic claim. Label whether it supports, challenges, or contextualizes a judgment."
+    );
+  }
   const rows = scoped("evidence");
   const visuals = buildVisualizationSpecs(data, data.active);
   if (!listState.evidence.sort) listState.evidence.sort = "date-desc";
@@ -1086,6 +1233,13 @@ function evidenceView() {
 }
 
 function competitorsView() {
+  if (!pursuit()) {
+    return noPursuitPanel(
+      "COMPETITORS",
+      "Competitive landscape and scoring",
+      "Record explicit competitor hypotheses, cite supporting evidence, and score each company against the same customer criteria."
+    );
+  }
   const competitors = scoped("competitors");
   const criteria = scoped("criteria");
   const scores = calculateCompetitiveScores(data, data.active);
@@ -1179,6 +1333,16 @@ function competitorsView() {
 }
 
 function importsView() {
+  if (!pursuit()) {
+    // The Pursuits destination needs no active pursuit, so the wizard stays reachable
+    // here; every other destination reports "Select an existing pursuit" on review.
+    return noPursuitPanel(
+      "DATA IMPORT",
+      "Bring spreadsheet data into the analysis",
+      "Select an Excel or CSV file, choose a worksheet and destination, map its columns, and validate every row before anything changes.",
+      `<button class="btn" type="button" data-action="tabular-import">Import pursuits from Excel or CSV</button>`
+    );
+  }
   return `${sectionHero(
     "DATA IMPORT",
     "Bring spreadsheet data into the analysis",
@@ -1225,7 +1389,7 @@ function guideView() {
     [
       "portfolio",
       "Choose a pursuit",
-      "Create a pursuit or select the opportunity your team is assessing.",
+      "The workspace starts empty. Create a pursuit for the opportunity your team is assessing, or load the demonstration workspace to explore the workflow first.",
       "Open Pursuit Portfolio"
     ],
     [
@@ -1274,7 +1438,7 @@ function guideView() {
   return `${sectionHero(
     "USER GUIDE",
     "How to use Black Hat Agent",
-    "Follow this workflow to turn team knowledge and source evidence into a reviewable competitive analysis.",
+    "Follow this workflow to turn team knowledge and source evidence into a reviewable competitive analysis. A new workspace starts empty: create a pursuit, or load the demonstration workspace to explore.",
     `<button class="btn primary" data-view="portfolio">Start with Pursuit Portfolio</button>`
   )}
   <section class="panel guide-panel" aria-labelledby="guideWorkflowHeading">
@@ -1294,6 +1458,16 @@ function guideView() {
     </ol>
   </section>
   <div class="two-col guide-grid">
+    <section class="panel guide-card">
+      <p class="eyebrow">STARTING OUT</p>
+      <h2>Start empty, or explore the demonstration</h2>
+      <p>A first launch opens an empty workspace with only the built-in playbooks. Create a pursuit to begin your own analysis, or choose <strong>Load demonstration workspace</strong> from the Workspace menu to explore every view with example pursuits, criteria, evidence, competitors, and actions.</p>
+      <p>Loading the demonstration replaces the current workspace after a confirmation and creates a recovery snapshot first, so your own work can be restored from Recovery.</p>
+      <div class="row">
+        <button class="btn small" type="button" data-action="new-pursuit">Create pursuit</button>
+        <button class="btn small" type="button" data-action="load-demo">Load demonstration workspace</button>
+      </div>
+    </section>
     <section class="panel guide-card">
       <p class="eyebrow">BEFORE GENERATING A REPORT</p>
       <h2>Build an evidence-ready workspace</h2>
@@ -1339,6 +1513,7 @@ function guideView() {
 }
 
 function playbooksView() {
+  const active = pursuit();
   return `${sectionHero(
     "PLAYBOOK LIBRARY",
     "Facilitation playbooks",
@@ -1351,7 +1526,11 @@ function playbooksView() {
         <span class="stage">${item.builtIn ? "BUILT-IN" : "CUSTOM"}</span>
         <h3>${esc(item.name)}</h3><p>${esc(item.description)}</p>
         <small class="block">Sections: ${esc(item.sections)}</small>
-        <div class="row"><button class="btn small" data-use-playbook="${esc(item.id)}">Use for active pursuit</button>
+        <div class="row">${
+          active
+            ? `<button class="btn small" data-use-playbook="${esc(item.id)}">Use for active pursuit</button>`
+            : ""
+        }
           ${
             item.builtIn
             ? `<button class="btn small" data-clone-playbook="${esc(item.id)}">Clone</button>`
@@ -1359,11 +1538,22 @@ function playbooksView() {
         }</div>
       </article>`
     )
-    .join("")}</div>`;
+    .join("")}</div>${
+    active
+      ? ""
+      : `<p class="note">No pursuit is open, so playbooks cannot be assigned yet. <button class="btn small" type="button" data-view="portfolio">Open Pursuit Portfolio</button></p>`
+  }`;
 }
 
 function sessionView() {
   const active = pursuit();
+  if (!active) {
+    return noPursuitPanel(
+      "BLACK HAT SESSION",
+      "Generate a deterministic competitive analysis",
+      "The engine calculates weighted relative position and writes a source-linked report from the information entered here. It does not call an AI model."
+    );
+  }
   const readiness = calculateCompetitiveScores(data, active.id);
   const blocked = !readiness.criteria.length;
   return `${sectionHero(
@@ -1394,6 +1584,13 @@ function sessionView() {
 }
 
 function historyView() {
+  if (!pursuit()) {
+    return noPursuitPanel(
+      "RUN HISTORY",
+      "Analysis history",
+      "Reports preserve their source hash, approval status, edits, and prior revisions."
+    );
+  }
   const runs = scoped("runs").slice().reverse();
   const visuals = buildVisualizationSpecs(data, data.active);
   return `${sectionHero(
@@ -1423,6 +1620,13 @@ function historyView() {
 }
 
 function outputsView() {
+  if (!pursuit()) {
+    return noPursuitPanel(
+      "OUTPUT CENTER",
+      "Editable competitive-analysis reports",
+      "Review the analysis, save controlled revisions, approve it, and export Markdown, visual HTML, Word-compatible .doc, or print-ready PDF."
+    );
+  }
   const runs = scoped("runs").slice().reverse();
   return `${sectionHero(
     "OUTPUT CENTER",
@@ -1466,6 +1670,13 @@ function outputsView() {
 }
 
 function actionsView() {
+  if (!pursuit()) {
+    return noPursuitPanel(
+      "ACTION REGISTER",
+      "Prioritized mitigation and intelligence actions",
+      "Convert vulnerabilities, proof gaps, and unanswered questions into accountable work."
+    );
+  }
   const rows = scoped("actions");
   const visuals = buildVisualizationSpecs(data, data.active);
   if (!listState.actions.sort) listState.actions.sort = "priority";
@@ -1526,6 +1737,33 @@ function actionsView() {
   }</div>`;
 }
 
+// The set-aside copy is described by its timestamp and size only; its content is
+// never parsed as a workspace or rendered into the page.
+function unreadableCopyPanel() {
+  const stored = readUnreadableCopy();
+  const copy = stored || (unreadableRaw ? { raw: unreadableRaw, savedAt: "" } : null);
+  if (!copy) return "";
+  const savedAt = Number.isFinite(Date.parse(copy.savedAt))
+    ? new Date(copy.savedAt).toLocaleString()
+    : "an unknown time";
+  const bytes = new TextEncoder().encode(copy.raw).length;
+  const provenance = stored
+    ? `A stored workspace that could not be read was set aside on <strong>${esc(
+        savedAt
+      )}</strong> (${esc(bytes.toLocaleString())} bytes). It is kept exactly as stored and is not opened here.`
+    : `A stored workspace that could not be read (${esc(
+        bytes.toLocaleString()
+      )} bytes) could not be set aside because browser storage is full. It is available only until this page is reloaded or the workspace is saved, so download it now.`;
+  return `<section class="panel unreadable-copy" aria-labelledby="unreadableCopyHeading">
+    <h2 id="unreadableCopyHeading">Unreadable workspace copy</h2>
+    <p>${provenance} Download it to inspect or repair it elsewhere, then discard the copy.</p>
+    <div class="row">
+      <button class="btn primary" type="button" data-action="download-unreadable">Download unreadable workspace copy</button>
+      <button class="btn danger" type="button" data-action="discard-unreadable">Discard copy</button>
+    </div>
+  </section>`;
+}
+
 function recoveryView() {
   return `${sectionHero(
     "RECOVERY",
@@ -1533,6 +1771,7 @@ function recoveryView() {
     "Snapshots are created before destructive operations and can also be created manually. The eight newest are retained.",
     `<button class="btn primary" data-action="snapshot">Create snapshot</button>`
   )}
+  ${unreadableCopyPanel()}
   <div class="panel">${
     data.snapshots.length
       ? `<div class="snapshot-list">${data.snapshots
@@ -1590,7 +1829,7 @@ function render() {
     guide: guideView
   };
   if (!views[view]) view = "portfolio";
-  document.querySelector("#app").innerHTML = `<a class="skip-link" href="#content">Skip to content</a><div class="app">${nav()}<main class="main">${staleBanner()}${header()}<div class="content" id="content" tabindex="-1">${views[
+  document.querySelector("#app").innerHTML = `<a class="skip-link" href="#content">Skip to content</a><div class="app">${nav()}<main class="main">${staleBanner()}${startupBanner()}${header()}<div class="content" id="content" tabindex="-1">${views[
     view
   ]()}</div><div class="footer-note">Browser-only application · Deterministic analysis · Export backups regularly.</div></main></div><dialog id="modal" aria-modal="true" aria-labelledby="modal-title"></dialog>`;
   document.title = `${VIEW_LABELS[view] || "Black Hat Agent"} · Black Hat Agent`;
@@ -2377,6 +2616,11 @@ document.addEventListener("click", async event => {
     location.reload();
     return;
   }
+  if (actionControl?.dataset.action === "dismiss-startup-warning") {
+    startupWarning = "";
+    render();
+    return;
+  }
   const button = event.target.closest("button");
   if (!button) {
     if (workspaceMenuOpen && !event.target.closest(".workspace-menu-shell")) {
@@ -2452,16 +2696,47 @@ document.addEventListener("click", async event => {
       toast("Recovery snapshot created");
     }
   }
-  if (button.dataset.action === "reset-demo") {
-    if (confirm("Replace the current workspace with the demonstration workspace?")) {
-      const backup = makeSnapshot("Before resetting demo");
+  if (button.dataset.action === "load-demo") {
+    setWorkspaceMenuOpen(false);
+    if (!confirmDiscardChanges()) return;
+    if (
+      confirm(
+        "Replace the current workspace with the demonstration workspace? A recovery snapshot of the current workspace is created first."
+      )
+    ) {
+      const backup = makeSnapshot("Before loading the demonstration workspace");
+      const previousSnapshots = data.snapshots;
       data = normalizeWorkspace(seed, seed);
-      data.snapshots.push(backup);
+      data.snapshots = [...previousSnapshots, backup].slice(-8);
       if (save()) {
         navigateTo("portfolio");
-        toast("Demonstration workspace restored");
+        toast("Demonstration workspace loaded");
       } else {
         render();
+      }
+    }
+  }
+  if (button.dataset.action === "download-unreadable") {
+    const copy = readUnreadableCopy() || (unreadableRaw ? { raw: unreadableRaw } : null);
+    if (!copy) {
+      toast("No unreadable workspace copy is stored.", "error");
+      render();
+      return;
+    }
+    download(
+      `black-hat-agent-unreadable-workspace-${localDate()}.json`,
+      copy.raw,
+      "application/json;charset=utf-8"
+    );
+  }
+  if (button.dataset.action === "discard-unreadable") {
+    if (confirm("Discard the unreadable workspace copy? It cannot be recovered afterwards.")) {
+      unreadableRaw = "";
+      if (discardUnreadableCopy()) {
+        render();
+        toast("Unreadable workspace copy discarded");
+      } else {
+        toast("The unreadable workspace copy could not be removed.", "error");
       }
     }
   }
@@ -2504,7 +2779,12 @@ document.addEventListener("click", async event => {
     return;
   }
   if (button.dataset.usePlaybook) {
-    pursuit().playbook = data.playbooks.find(item => item.id === button.dataset.usePlaybook).name;
+    const active = pursuit();
+    if (!active) {
+      toast("Open or create a pursuit before assigning a playbook.", "error");
+      return;
+    }
+    active.playbook = data.playbooks.find(item => item.id === button.dataset.usePlaybook).name;
     if (save()) {
       render();
       toast("Playbook assigned");
@@ -3253,5 +3533,4 @@ if (frameBlocked) {
 } else {
   history.replaceState({ view }, "", `#${view}`);
   render();
-  if (startupWarning) toast(startupWarning, "error");
 }

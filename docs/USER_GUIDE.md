@@ -6,7 +6,8 @@ version of the recommended workflow with direct links to each workspace area.
 ## Quick start
 
 1. Open the site. No sign-in is presented or required.
-2. Choose a synthetic pursuit or select **Create pursuit**.
+2. Select **Create pursuit**, or select **Load demonstration workspace** to explore
+   the workflow with sample records first.
 3. Optionally use **Data Import** to map an Excel or CSV table into the workspace.
 4. Complete the opportunity profile, customer priorities, and evaluation criteria.
 5. Add customer, competitor, and market artifacts in **Evidence Room**.
@@ -251,7 +252,10 @@ Canceling before confirmation leaves the workspace unchanged.
 - **Export workspace** downloads a JSON backup containing the editable workspace.
 - **Import** validates a selected JSON file up to 10 MB before replacing the full
   current workspace.
-- **Reset demo** replaces the working workspace with synthetic sample data.
+- **Load demonstration workspace** replaces the working workspace with the
+  demonstration records after confirmation; a recovery snapshot is created first.
+- If a stored workspace cannot be read, the application starts empty and keeps a
+  copy of the unreadable data, which **Recovery** can download or discard.
 - **Snapshots/recovery** restore recent local states without a downloaded file.
 
 An invalid or incompatible import is rejected and should leave the current workspace

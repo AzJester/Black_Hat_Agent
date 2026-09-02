@@ -100,7 +100,7 @@ test("F8: a storage event reloads a clean tab and freezes a dirty one behind a p
     /toast\("This workspace changed in another tab\. Reload before making more edits\."\)/
   );
   const adopt = functionSource("adoptExternalWorkspace");
-  assert.match(adopt, /const next = loadWorkspace\(\);/);
+  assert.match(adopt, /const next = loadWorkspace\(\{ preserveUnreadable: false \}\);/);
   assert.match(adopt, /lastPersistedData = structuredClone\(next\);/);
   assert.match(adopt, /render\(\);/);
   const banner = functionSource("staleBanner");

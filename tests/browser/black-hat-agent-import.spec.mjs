@@ -1,13 +1,9 @@
 import { test, expect } from "@playwright/test";
-
-const APP_PATH = "./";
-const STORAGE_KEY = "black_hat_agent_public_v2";
+import { STORAGE_KEY, loadDemoWorkspace } from "./helpers.mjs";
 
 async function gotoFreshBlackHatAgent(page) {
-  const response = await page.goto(APP_PATH, { waitUntil: "domcontentloaded" });
-  expect(response?.status()).toBe(200);
-  await page.evaluate(() => localStorage.clear());
-  await page.reload({ waitUntil: "domcontentloaded" });
+  // Scoped imports need an active pursuit, so start from the demonstration workspace.
+  await loadDemoWorkspace(page);
   await expect(page).toHaveTitle(/Black Hat Agent$/i);
   await expect(
     page.locator(".sidebar .brand").getByText("Black Hat Agent", { exact: true })

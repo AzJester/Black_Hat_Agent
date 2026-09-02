@@ -28,6 +28,8 @@ evidence-cited scorecards, challenge themes, actions, and versioned reports.
 - validated and migrated JSON workspace import/export with strict identifiers,
   pursuit isolation, and relationship checks
 - automatic local snapshots and manual recovery
+- an empty first launch, a demonstration workspace that can be loaded on demand, and
+  a preserved, downloadable copy of any stored workspace that cannot be read
 - grouped, text-only application navigation with a compact mobile drawer
 - visible unsaved and save-error states, protected navigation, and failure-safe
   persistence

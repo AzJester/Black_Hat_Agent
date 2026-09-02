@@ -180,8 +180,16 @@ function validateWorkspaceCandidate(candidate, context) {
   const collections = Object.fromEntries(
     REQUIRED_COLLECTIONS.map(name => [name, Array.isArray(candidate[name]) ? candidate[name] : []])
   );
-  if (!collections.pursuits.length) {
-    errors.push(`${path} requires at least one pursuit.`);
+  // A workspace with zero pursuits is valid: the application starts empty and a
+  // recovery snapshot of that empty workspace must round-trip. A candidate with no
+  // pursuits collection at all is still rejected (the loop above reports it when the
+  // current collections are required; this covers the legacy-import shape).
+  if (
+    candidate.pursuits === undefined &&
+    !context.requireCurrentCollections &&
+    !context.requireSnapshotCollections
+  ) {
+    errors.push(`${path}.pursuits must be an array.`);
   }
 
   const pursuitById = new Map();
@@ -459,7 +467,9 @@ function validateSnapshotInto(snapshot, errors, context) {
   if (!isSafeRecordId(snapshot.id)) {
     errors.push(`${path}.id must be a safe record ID.`);
   }
-  if (!isSafeRecordId(snapshot.active)) {
+  // An empty active id is the snapshot of a workspace with no pursuits (the empty
+  // first-launch workspace); any other value must be a safe record id.
+  if (snapshot.active !== "" && !isSafeRecordId(snapshot.active)) {
     errors.push(`${path}.active must be a safe relationship ID.`);
   }
   if (!isRecordObject(snapshot.workspace)) {

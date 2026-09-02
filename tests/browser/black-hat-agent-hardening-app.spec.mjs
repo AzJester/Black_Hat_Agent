@@ -1,12 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { APP_PATH, STORAGE_KEY, loadDemoWorkspace } from "./helpers.mjs";
 
-const APP_PATH = "./";
-const STORAGE_KEY = "black_hat_agent_public_v2";
-
+// These specs exercise pursuit-scoped views, so a fresh page is the on-demand
+// demonstration workspace opened on the requested view.
 async function freshPage(page, hash = "") {
-  await page.goto(`${APP_PATH}${hash}`, { waitUntil: "domcontentloaded" });
-  await page.evaluate(() => localStorage.clear());
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await loadDemoWorkspace(page, { hash });
 }
 
 async function caretState(locator) {
