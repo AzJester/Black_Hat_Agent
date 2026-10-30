@@ -360,16 +360,21 @@ test("light-theme chart labels and the scenario history series retain WCAG contr
     { theme: "light" }
   );
 
-  assert.match(heatmap, /fill="#ffffff"[^>]*>3\/5<\/text>/);
-  assert.match(heatmap, /fill="#ffffff"[^>]*>4\/5<\/text>/);
-  assert.match(evidence, /fill="#ffffff"[^>]*>3\/5<\/text>/);
-  assert.match(actions, /fill="#d8f3ff"[^>]*stroke="#075d7d"/);
-  assert.match(actions, /fill="#211a30"[^>]*>1<\/text>/);
-  assert.match(history, /stroke="#075d7d"[^>]*stroke-dasharray="2 5"/);
-  assert.ok(contrastRatio("#ffffff", "#075d7d") >= 4.5);
-  assert.ok(contrastRatio("#ffffff", "#087da9") >= 4.5);
-  assert.ok(contrastRatio("#211a30", "#d8f3ff") >= 4.5);
-  assert.ok(contrastRatio("#075d7d", "#ffffff") >= 3);
+  // Brand palette: Carbon text on Steel, Bone text on Gunmetal and Carbon fills,
+  // Carbon text on Flare, and Ion only as a fill (never as text or a bare line on light).
+  assert.match(heatmap, /fill="#8A8F99"[^>]*stroke="#0B0D10"/);
+  assert.match(heatmap, /fill="#0B0D10"[^>]*>3\/5<\/text>/);
+  assert.match(heatmap, /fill="#171B22"[^>]*stroke="#0B0D10"/);
+  assert.match(heatmap, /fill="#EEEDE7"[^>]*>4\/5<\/text>/);
+  assert.match(evidence, /fill="#EEEDE7"[^>]*>3\/5<\/text>/);
+  assert.match(actions, /fill="#E2FDFF"[^>]*stroke="#0B0D10"/);
+  assert.match(actions, /fill="#0B0D10"[^>]*>1<\/text>/);
+  assert.match(history, /stroke="#171B22"[^>]*stroke-dasharray="2 5"/);
+  assert.ok(contrastRatio("#0B0D10", "#8A8F99") >= 4.5);
+  assert.ok(contrastRatio("#EEEDE7", "#171B22") >= 4.5);
+  assert.ok(contrastRatio("#EEEDE7", "#0B0D10") >= 4.5);
+  assert.ok(contrastRatio("#0B0D10", "#E2FDFF") >= 4.5);
+  assert.ok(contrastRatio("#171B22", "#FFFFFF") >= 3);
   assert.doesNotMatch(
     styles,
     /\.chart-svg text[^{}]*\{[^{}]*\bfill\s*:/i,

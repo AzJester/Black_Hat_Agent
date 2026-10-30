@@ -955,7 +955,7 @@ function portfolio() {
     return matchesArchive && text.includes(query.toLowerCase());
   });
   return `<div class="hero">
-    <div><p class="eyebrow">PURSUIT PORTFOLIO</p><h1>Evidence-grounded competitive analysis.</h1><p>Define customer priorities, score competitors, challenge assumptions, and generate source-linked Black Hat reports entirely in your browser.</p></div>
+    <div><p class="eyebrow">PURSUIT PORTFOLIO</p><h1>Evidence-grounded competitive analysis</h1><p>Define customer priorities, score competitors, challenge assumptions, and generate source-linked Black Hat reports entirely in your browser.</p></div>
     <button class="btn primary" data-action="new-pursuit">Create pursuit</button>
   </div>
   <div class="metrics">
@@ -2184,7 +2184,7 @@ function exportVisuals(run) {
   const sections = visualExportSections(run);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(
     run.title
-  )} — Analysis visuals</title><style>body{font:15px/1.5 Arial,sans-serif;color:#211a30;max-width:1100px;margin:32px auto;padding:0 24px}h1,h2{line-height:1.2}.export-visual{margin:36px 0;break-inside:avoid}.export-visual svg{display:block;width:100%;height:auto;border:1px solid #d6d0df;border-radius:8px;background:#fff}.table-wrap{overflow:auto;margin-top:12px}table{border-collapse:collapse;width:100%;font-size:13px}caption{text-align:left;font-weight:700;margin-bottom:8px}th,td{border:1px solid #d6d0df;padding:7px;text-align:left}thead{background:#eeeaf3}@media print{body{margin:0;max-width:none}.export-visual{break-inside:avoid}}</style></head><body><h1>${esc(
+  )} — Analysis visuals</title><style>body{font:15px/1.55 Archivo,Arial,sans-serif;color:#0B0D10;background:#FFFFFF;max-width:1100px;margin:32px auto;padding:0 24px}h1,h2{line-height:1.2}h1{text-transform:uppercase;padding-bottom:12px;border-bottom:3px solid #23CEF0}.export-visual{margin:36px 0;break-inside:avoid}.export-visual svg{display:block;width:100%;height:auto;border:1px solid #8A8F99;background:#FFFFFF}.table-wrap{overflow:auto;margin-top:12px}table{border-collapse:collapse;width:100%;font-size:10pt}caption{text-align:left;font-weight:700;margin-bottom:8px}th,td{border-bottom:1px solid #8A8F99;padding:6px 10px;text-align:left}th{font:500 9pt/1.3 'JetBrains Mono',Consolas,monospace;text-transform:uppercase;letter-spacing:.06em}thead th{background:#171B22;color:#EEEDE7}@media print{body{margin:0;max-width:none}.export-visual{break-inside:avoid}}</style></head><body><h1>${esc(
     run.title
   )} — Analysis visuals</h1>${
     visualExportIntro(run) ? `<p>${esc(visualExportIntro(run))}</p>` : ""
@@ -2255,7 +2255,7 @@ async function exportWord(run) {
     )
     .replace(
       "</head>",
-      "<style>.export-visual{margin:24px 0;page-break-inside:avoid}.export-visual img{max-width:100%;height:auto}.table-wrap{margin-top:8px}table{border-collapse:collapse;width:100%;font-size:10pt}caption{text-align:left;font-weight:bold;margin-bottom:6px}th,td{border:1px solid #b8b8b8;padding:5px;text-align:left}thead{background:#eeeaf3}</style></head>"
+      "<style>.export-visual{margin:24px 0;page-break-inside:avoid}.export-visual img{max-width:100%;height:auto}.table-wrap{margin-top:8px}table{border-collapse:collapse;width:100%;font-size:10pt}caption{text-align:left;font-weight:bold;margin-bottom:6px}th,td{border:1px solid #8A8F99;padding:5px;text-align:left}th{font:500 9pt/1.3 'JetBrains Mono',Consolas,monospace;text-transform:uppercase;letter-spacing:.06em}thead th{background:#171B22;color:#EEEDE7}</style></head>"
     );
   download(
     `${reportFilename(run)}.doc`,
@@ -2282,7 +2282,7 @@ function exportPDF(run) {
     )
     .replace(
       "</head>",
-      "<style>@page{margin:.55in}body{margin:0}button{display:none}.export-visual{page-break-inside:avoid;margin:24px 0}.export-visual svg{display:block;max-width:100%;height:auto}.table-wrap{overflow:visible}table{border-collapse:collapse;width:100%;font-size:9pt}caption{text-align:left;font-weight:bold;margin-bottom:5px}th,td{border:1px solid #b8b8b8;padding:4px;text-align:left}thead{background:#eeeaf3}</style></head>"
+      "<style>@page{margin:.55in}body{margin:0}button{display:none}.export-visual{page-break-inside:avoid;margin:24px 0}.export-visual svg{display:block;max-width:100%;height:auto}.table-wrap{overflow:visible}table{border-collapse:collapse;width:100%;font-size:9pt}caption{text-align:left;font-weight:bold;margin-bottom:5px}th,td{border-bottom:1px solid #8A8F99;padding:4px 8px;text-align:left}th{font:500 9pt/1.3 'JetBrains Mono',Consolas,monospace;text-transform:uppercase;letter-spacing:.06em}thead th{background:#171B22;color:#EEEDE7;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head>"
     );
   printWindow.document.open();
   printWindow.document.write(html);

@@ -87,14 +87,14 @@ const ink = resolveVar("var(--ink)", tokens);
 test("the contrast helpers reproduce the WCAG reference values", () => {
   assert.equal(contrastRatio("#000", "#fff").toFixed(2), "21.00");
   assert.equal(contrastRatio("#fff", "#fff").toFixed(2), "1.00");
-  assert.equal(contrastRatio("#29aae1", "#ffffff").toFixed(2), "2.65");
-  assert.equal(contrastRatio("#29aae1", "#f5f6f8").toFixed(2), "2.45");
+  assert.equal(contrastRatio("#23cef0", "#ffffff").toFixed(2), "1.88");
+  assert.equal(contrastRatio("#23cef0", "#0b0d10").toFixed(2), "10.34");
 });
 
-test("the palette tokens used by the focus rules resolve to hex colours", () => {
-  assert.equal(paper, "#f5f6f8");
-  assert.equal(panel, "#fff");
-  assert.equal(ink, "#171327");
+test("the palette tokens used by the focus rules resolve to the brand hex colours", () => {
+  assert.equal(paper.toLowerCase(), "#eeede7");
+  assert.equal(panel.toLowerCase(), "#fff");
+  assert.equal(ink.toLowerCase(), "#0b0d10");
 });
 
 test("the global focus-visible ring clears 3:1 on both light surfaces", () => {
@@ -102,7 +102,7 @@ test("the global focus-visible ring clears 3:1 on both light surfaces", () => {
     css,
     /:where\(a,button,input,select,textarea[^{]*\):focus-visible/
   );
-  assert.match(globalRule, /outline-offset\s*:\s*3px/);
+  assert.match(globalRule, /outline-offset\s*:\s*2px/);
   const ring = resolveVar(outlineColor(globalRule), tokens);
   const againstWhite = contrastRatio(ring, white);
   const againstPaper = contrastRatio(ring, paper);
@@ -147,7 +147,7 @@ test("the skip link paints its focus ring inside its own white pill, not on the 
   const background = skipLink.match(/(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/s);
   assert.ok(background, "the skip link declares its own background");
   const pillBackground = resolveVar(background[1], tokens);
-  assert.equal(pillBackground, "#fff", "the skip link pill has a white background");
+  assert.equal(pillBackground.toLowerCase(), "#fff", "the skip link pill has a white background");
 
   const globalRule = findRule(css, /:where\(a,button,input,select,textarea[^{]*\):focus-visible/);
   const skipRule = findRule(css, /\.skip-link:focus-visible/);

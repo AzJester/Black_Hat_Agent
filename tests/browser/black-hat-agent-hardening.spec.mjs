@@ -32,7 +32,7 @@ test("mobile navigation, URL history, and responsive visuals work together", asy
 
   await page.goBack();
   await expect(page).toHaveURL(/#portfolio$/);
-  await expect(page.getByRole("heading", { name: "Evidence-grounded competitive analysis." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Evidence-grounded competitive analysis", exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 
