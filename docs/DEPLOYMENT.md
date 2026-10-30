@@ -23,6 +23,15 @@ and security impact before upgrading the library. Keep
 `spreadsheet-worker.js` alongside the application: Excel parsing is
 required to run in that same-origin, time-limited worker.
 
+## Self-hosted fonts
+
+The interface uses Archivo (display and body) and JetBrains Mono (labels, buttons,
+table headers), both under the SIL Open Font License 1.1. The WOFF2 files, their
+`font-face.css`, and each license live in `fonts/`. Load them from there; do not
+switch to a font CDN. The page's Content Security Policy allows only same-origin
+resources, and the audit probe fails on any third-party request. The Pages
+workflow copies `fonts/` into the published site.
+
 ## Local verification
 
 From the repository root:

@@ -76,7 +76,7 @@ jobs:
           mkdir -p _site
           cp -- index.html app.js engine.js import-engine.js import-wizard.js \
             visualizations.js spreadsheet-worker.js styles.css favicon.svg README.md _site/
-          cp -R docs vendor _site/
+          cp -R docs vendor fonts _site/
           touch _site/.nojekyll
 
       - name: Upload site artifact

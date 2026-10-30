@@ -1623,7 +1623,7 @@ export function markdownToWordHtml(markdown, title) {
   closeList();
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
     title
-  )}</title><style>body{font-family:Arial,sans-serif;color:#171327;line-height:1.45;margin:48px}h1{color:#442c81}h2{border-bottom:1px solid #ccc;padding-bottom:4px}blockquote{background:#eef8fc;border-left:4px solid #29aae1;padding:10px}table{border-collapse:collapse;width:100%;margin:16px 0;font-size:9pt}th,td{border:1px solid #bbb;padding:7px;text-align:left;vertical-align:top}th{background:#eef8fc}</style></head><body>${html.join(
+  )}</title><style>body{font-family:Archivo,Arial,sans-serif;color:#0B0D10;background:#FFFFFF;line-height:1.5;margin:48px}h1{color:#0B0D10;text-transform:uppercase;padding-bottom:10px;border-bottom:3px solid #23CEF0}h2{border-bottom:1px solid #8A8F99;padding-bottom:4px}blockquote{background:#E2FDFF;border-left:4px solid #23CEF0;margin-left:0;padding:10px}table{border-collapse:collapse;width:100%;margin:16px 0;font-size:9pt}th,td{border:1px solid #8A8F99;padding:6px 8px;text-align:left;vertical-align:top}th{background:#171B22;color:#EEEDE7;font-family:'JetBrains Mono',Consolas,monospace;font-weight:normal;text-transform:uppercase;letter-spacing:.06em;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${html.join(
     ""
   )}</body></html>`;
 }

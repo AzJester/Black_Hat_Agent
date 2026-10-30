@@ -27,48 +27,59 @@ const REPORT_VISUAL_LIMITS = Object.freeze({
   textBytes: 180
 });
 
+// Brand palette (Void, Carbon, Gunmetal, Bone, Steel, Ion, Flare). Ion is the one
+// signal color; on light grounds it is a fill only, so lines that carry the signal
+// use signalLine (Carbon on light, Ion on dark) and Ion fills their markers.
 const DARK_PALETTE = Object.freeze({
-  ink: "#f7f4ff",
-  muted: "#bcb4cf",
-  quiet: "#8e849f",
-  grid: "#514760",
-  track: "#2a2338",
-  surface: "#211a30",
-  accent: "#29aae1",
-  accentDark: "#087da9",
-  accentOpen: "#d8f3ff",
-  onAccent: "#10202a",
-  onAccentDark: "#ffffff",
-  actionFill: "#087da9",
-  actionText: "#ffffff",
-  scenario: "#d8f3ff",
-  comparator: "#f0b44d",
-  comparatorOpen: "#fff0c8"
+  ink: "#EEEDE7",
+  muted: "#8A8F99",
+  quiet: "#8A8F99",
+  grid: "#171B22",
+  track: "#171B22",
+  surface: "#0B0D10",
+  accent: "#23CEF0",
+  accentDark: "#EEEDE7",
+  accentOpen: "#8A8F99",
+  onAccent: "#0B0D10",
+  onAccentDark: "#0B0D10",
+  actionFill: "#171B22",
+  actionText: "#EEEDE7",
+  scenario: "#EEEDE7",
+  comparator: "#8A8F99",
+  comparatorOpen: "#171B22",
+  signalLine: "#23CEF0",
+  neutralFill: "#8A8F99",
+  heatRamp: Object.freeze(["#0B0D10", "#171B22", "#8A8F99", "#EEEDE7", "#23CEF0"]),
+  heatText: Object.freeze(["#EEEDE7", "#EEEDE7", "#0B0D10", "#0B0D10", "#0B0D10"])
 });
 
 const LIGHT_PALETTE = Object.freeze({
-  ink: "#211a30",
-  muted: "#62586f",
-  quiet: "#80778c",
-  grid: "#d6d0df",
-  track: "#eeeaf3",
-  surface: "#ffffff",
-  accent: "#087da9",
-  accentDark: "#075d7d",
-  accentOpen: "#d8f3ff",
-  onAccent: "#ffffff",
-  onAccentDark: "#ffffff",
-  actionFill: "#d8f3ff",
-  actionText: "#211a30",
-  scenario: "#075d7d",
-  comparator: "#a96f09",
-  comparatorOpen: "#fff0c8"
+  ink: "#0B0D10",
+  muted: "#171B22",
+  quiet: "#8A8F99",
+  grid: "#8A8F99",
+  track: "#EEEDE7",
+  surface: "#FFFFFF",
+  accent: "#23CEF0",
+  accentDark: "#0B0D10",
+  accentOpen: "#E2FDFF",
+  onAccent: "#0B0D10",
+  onAccentDark: "#EEEDE7",
+  actionFill: "#E2FDFF",
+  actionText: "#0B0D10",
+  scenario: "#171B22",
+  comparator: "#8A8F99",
+  comparatorOpen: "#E2FDFF",
+  signalLine: "#0B0D10",
+  neutralFill: "#8A8F99",
+  heatRamp: Object.freeze(["#FFFFFF", "#EEEDE7", "#8A8F99", "#171B22", "#23CEF0"]),
+  heatText: Object.freeze(["#0B0D10", "#0B0D10", "#0B0D10", "#EEEDE7", "#0B0D10"])
 });
 
 const PRIORITIES = Object.freeze(["Critical", "High", "Medium", "Low"]);
 const ACTION_STATUSES = Object.freeze(["Open", "In progress", "Blocked", "Complete"]);
 const HISTORY_SERIES = Object.freeze([
-  { key: "ourCpi", label: "Our CPI", dash: "", marker: "circle", color: "accent" },
+  { key: "ourCpi", label: "Our CPI", dash: "", marker: "circle", color: "signalLine", markerFill: "accent" },
   {
     key: "rivalCpi",
     label: "Strongest rival CPI",
@@ -620,19 +631,19 @@ export function renderRankedCpiSvg(spec = {}, options = {}) {
       )
     );
     body.push(
-      `<rect x="${plotX}" y="${y}" width="${plotWidth}" height="22" rx="3" fill="${palette.track}" stroke="${palette.grid}"/>`
+      `<rect x="${plotX}" y="${y}" width="${plotWidth}" height="22" fill="${palette.track}" stroke="${palette.grid}"/>`
     );
     if (entity.cpi === null) {
       body.push(
-        `<rect x="${plotX}" y="${y}" width="${plotWidth}" height="22" rx="3" fill="none" stroke="${palette.muted}" stroke-dasharray="5 4"/>`
+        `<rect x="${plotX}" y="${y}" width="${plotWidth}" height="22" fill="none" stroke="${palette.muted}" stroke-dasharray="5 4"/>`
       );
     } else {
       body.push(
         `<rect x="${plotX}" y="${y}" width="${round(
           (entity.cpi / 100) * plotWidth,
           2
-        )}" height="22" rx="3" fill="${
-          entity.isUs ? palette.accent : palette.accentOpen
+        )}" height="22" fill="${
+          entity.isUs ? palette.accent : palette.neutralFill
         }" stroke="${entity.isUs ? palette.accentDark : palette.comparator}"/>`
       );
     }
@@ -771,7 +782,7 @@ export function renderScoreHeatmapSvg(spec = {}, options = {}) {
           `${row?.name || "Unnamed criterion"} — ${column?.name || "Unnamed entity"}: ${valueLabel}`
         )}</title><rect x="${x + 4}" y="${y}" width="${cellWidth - 8}" height="${
           cellHeight - 8
-        }" rx="3" fill="${
+        }" fill="${
           value === null ? `url(#${unknownPatternId})` : heatTone(value, palette)
         }" stroke="${value === null ? palette.muted : palette.accentDark}"/>`
       );
@@ -860,7 +871,7 @@ export function renderCriterionDeltaSvg(spec = {}, options = {}) {
   const ids = frameIds("criterion-deltas", options);
   const negativePatternId = `${ids.base}-negative`;
   const body = [
-    `<defs><pattern id="${negativePatternId}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="${palette.track}"/><line x1="0" y1="0" x2="0" y2="8" stroke="${palette.accent}" stroke-width="2"/></pattern></defs>`
+    `<defs><pattern id="${negativePatternId}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="${palette.track}"/><line x1="0" y1="0" x2="0" y2="8" stroke="${palette.muted}" stroke-width="2"/></pattern></defs>`
   ];
 
   for (const tick of [-4, -2, 0, 2, 4]) {
@@ -944,7 +955,7 @@ export function renderCriterionDeltaSvg(spec = {}, options = {}) {
       const barWidth = (Math.abs(row.delta) / 8) * plotWidth;
       const x = row.delta < 0 ? centerX - barWidth : centerX;
       body.push(
-        `<rect x="${x}" y="${y + 2}" width="${barWidth}" height="20" rx="2" fill="${
+        `<rect x="${x}" y="${y + 2}" width="${barWidth}" height="20" fill="${
           row.delta < 0 ? `url(#${negativePatternId})` : palette.accent
         }" stroke="${palette.accentDark}"/>`
       );
@@ -1029,11 +1040,11 @@ export function renderScenarioRangeSvg(spec = {}, options = {}) {
     );
   }
   body.push(
-    `<line x1="${plotX}" y1="${y}" x2="${plotX + plotWidth}" y2="${y}" stroke="${palette.track}" stroke-width="12" stroke-linecap="round"/>`
+    `<line x1="${plotX}" y1="${y}" x2="${plotX + plotWidth}" y2="${y}" stroke="${palette.track}" stroke-width="12"/>`
   );
   if (hasRange) {
     body.push(
-      `<line x1="${lowX}" y1="${y}" x2="${highX}" y2="${y}" stroke="${palette.accentOpen}" stroke-width="18" stroke-linecap="round"/>`
+      `<line x1="${lowX}" y1="${y}" x2="${highX}" y2="${y}" stroke="${palette.accentOpen}" stroke-width="18"/>`
     );
     body.push(
       `<line x1="${lowX}" y1="${y - 14}" x2="${lowX}" y2="${y + 14}" stroke="${palette.accentDark}" stroke-width="2"/><line x1="${highX}" y1="${y - 14}" x2="${highX}" y2="${y + 14}" stroke="${palette.accentDark}" stroke-width="2"/>`
@@ -1219,7 +1230,7 @@ export function renderEvidenceGridSvg(spec = {}, options = {}) {
       body.push(
         `<rect x="${x + 4}" y="${y}" width="${cellWidth - 8}" height="${
           rowHeight - 7
-        }" rx="3" fill="${fill}" stroke="${
+        }" fill="${fill}" stroke="${
           column.key === "conflict" && row?.conflict ? palette.comparator : palette.grid
         }"/>`
       );
@@ -1377,7 +1388,7 @@ export function renderEvidenceRelationshipsSvg(spec = {}, options = {}) {
     body.push(
       `<g aria-label="${escapeSvgText(
         `${item?.label || "Unnamed evidence"}; ${linked ? "linked" : "unlinked"}`
-      )}"><title>${escapeSvgText(item?.label || "Unnamed evidence")}</title><rect x="${leftX}" y="${y}" width="${leftWidth}" height="${nodeHeight}" rx="4" fill="${
+      )}"><title>${escapeSvgText(item?.label || "Unnamed evidence")}</title><rect x="${leftX}" y="${y}" width="${leftWidth}" height="${nodeHeight}" fill="${
         linked ? palette.track : "none"
       }" stroke="${linked ? palette.accentDark : palette.muted}" stroke-dasharray="${
         linked ? "" : "5 4"
@@ -1413,7 +1424,7 @@ export function renderEvidenceRelationshipsSvg(spec = {}, options = {}) {
     body.push(
       `<g aria-label="${escapeSvgText(
         `${item?.label || "Unnamed criterion"}; ${linked ? "has evidence" : "no linked evidence"}`
-      )}"><title>${escapeSvgText(item?.label || "Unnamed criterion")}</title><rect x="${rightX}" y="${y}" width="${rightWidth}" height="${nodeHeight}" rx="4" fill="${
+      )}"><title>${escapeSvgText(item?.label || "Unnamed criterion")}</title><rect x="${rightX}" y="${y}" width="${rightWidth}" height="${nodeHeight}" fill="${
         linked ? palette.track : "none"
       }" stroke="${linked ? palette.comparator : palette.muted}" stroke-dasharray="${
         linked ? "" : "5 4"
@@ -1518,6 +1529,7 @@ export function renderRunHistorySvg(spec = {}, options = {}) {
   );
   visibleSeries.forEach((series, seriesIndex) => {
     const color = palette[series.color] || palette.accent;
+    const markerFill = palette[series.markerFill] || palette.surface;
     const segments = lineSegments(points, series.key, xFor, yFor);
     for (const segment of segments) {
       if (segment.length < 2) continue;
@@ -1538,7 +1550,7 @@ export function renderRunHistorySvg(spec = {}, options = {}) {
           xFor(pointIndex),
           yFor(value),
           color,
-          palette.surface,
+          markerFill,
           `${series.label}, ${point.label || `run ${pointIndex + 1}`}: ${formatNumber(value)}`
         )
       );
@@ -1551,7 +1563,7 @@ export function renderRunHistorySvg(spec = {}, options = {}) {
     body.push(
       `<line x1="790" y1="${legendY}" x2="820" y2="${legendY}" stroke="${color}" stroke-width="2" stroke-dasharray="${series.dash}"/>`
     );
-    body.push(markerShape(series.marker, 805, legendY, color, palette.surface, series.label));
+    body.push(markerShape(series.marker, 805, legendY, color, markerFill, series.label));
     body.push(
       textNode(
         832,
@@ -1696,7 +1708,7 @@ export function renderActionSummarySvg(spec = {}, options = {}) {
           `${priority} priority, ${status}: ${count} action${count === 1 ? "" : "s"}`
         )}</title><rect x="${x + 5}" y="${y}" width="${cellWidth - 10}" height="${
           rowHeight - 8
-        }" rx="3" fill="${count ? palette.actionFill : palette.track}" stroke="${
+        }" fill="${count ? palette.actionFill : palette.track}" stroke="${
           count ? palette.accentDark : palette.grid
         }"/>`
       );
@@ -1818,7 +1830,7 @@ function renderHistoryFallback(spec, points, options) {
     metrics.forEach(([label, value], index) => {
       const x = 28 + index * 162;
       body.push(
-        `<rect x="${x}" y="118" width="146" height="76" rx="4" fill="${palette.track}" stroke="${palette.grid}"/>`
+        `<rect x="${x}" y="118" width="146" height="76" fill="${palette.track}" stroke="${palette.grid}"/>`
       );
       body.push(
         textNode(x + 12, 143, label, { fill: palette.muted, size: 10, weight: 700 }, palette)
@@ -1864,7 +1876,7 @@ function renderHistoryFallback(spec, points, options) {
 function svgFrame({ type, title, description, width, height, body, options }) {
   const palette = paletteFor(options);
   const ids = frameIds(type, options);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${ids.title} ${ids.description}" focusable="false" preserveAspectRatio="xMinYMin meet" font-family="Inter,Segoe UI,Arial,sans-serif"><title id="${ids.title}">${escapeSvgText(
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${ids.title} ${ids.description}" focusable="false" preserveAspectRatio="xMinYMin meet" font-family="Archivo,Helvetica Neue,Arial,sans-serif"><title id="${ids.title}">${escapeSvgText(
     title
   )}</title><desc id="${ids.description}">${escapeSvgText(
     description
@@ -1887,7 +1899,7 @@ function emptySvg(type, title, description, message, options) {
     description: `${description || ""} ${message}`.trim(),
     width: 820,
     height: 190,
-    body: `<rect x="20" y="64" width="780" height="94" rx="4" fill="none" stroke="${
+    body: `<rect x="20" y="64" width="780" height="94" fill="none" stroke="${
       palette.grid
     }" stroke-dasharray="6 5"/>${textNode(
       410,
@@ -1910,7 +1922,11 @@ function textNode(x, y, value, style = {}, palette = DARK_PALETTE) {
     `text-anchor="${style.anchor || "start"}"`
   ];
   if (style.letterSpacing) attributes.push(`letter-spacing="${style.letterSpacing}"`);
-  if (style.mono) attributes.push('font-family="ui-monospace,SFMono-Regular,Consolas,monospace"');
+  attributes.push(
+    style.mono
+      ? 'font-family="JetBrains Mono,ui-monospace,Consolas,monospace"'
+      : 'font-family="Archivo,Helvetica Neue,Arial,sans-serif"'
+  );
   return `<text ${attributes.join(" ")}>${escapeSvgText(value)}</text>`;
 }
 
@@ -1948,17 +1964,21 @@ function axisGrid(x, y, width, height, palette) {
     .join("");
 }
 
+function heatStep(value) {
+  if (value >= 4.5) return 4;
+  if (value >= 3.5) return 3;
+  if (value >= 2.5) return 2;
+  if (value >= 1.5) return 1;
+  return 0;
+}
+
 function heatTone(value, palette) {
-  if (value >= 4.5) return palette.accentOpen;
-  if (value >= 3.5) return palette.accent;
-  if (value >= 2.5) return palette.accentDark;
-  if (value >= 1.5) return palette.track;
-  return palette.surface;
+  return palette.heatRamp[heatStep(value)];
 }
 
 function heatTextTone(value, palette) {
-  if (value === null || value < 2.5 || value >= 4.5) return palette.ink;
-  return value >= 3.5 ? palette.onAccent : palette.onAccentDark;
+  if (value === null) return palette.ink;
+  return palette.heatText[heatStep(value)];
 }
 
 function evidenceTone(key, row, palette) {
@@ -1976,7 +1996,7 @@ function relationshipDash(stance) {
 
 function relationshipColor(stance, palette) {
   if (stance === "Challenge") return palette.comparator;
-  if (stance === "Support") return palette.accent;
+  if (stance === "Support") return palette.signalLine;
   return palette.muted;
 }
 
