@@ -1896,7 +1896,7 @@ function guideView() {
     <section class="panel guide-card">
       <p class="eyebrow">IMPORTING DATA</p>
       <h2>Preview spreadsheet changes before applying them</h2>
-      <p>Choose an Excel or UTF-8 CSV file, select the worksheet and header row, choose a destination and mode, then review every suggested field mapping.</p>
+      <p>Choose an Excel or UTF-8 CSV file, select the worksheet and header row, choose a destination and mode, then review every suggested field mapping. For a session workbook, choose <strong>Participant inputs</strong>; include Evidence Basis and Source columns so picks are not flagged as unsourced.</p>
       <p>Nothing changes until validation passes and you select <strong>Apply import</strong>. Review all diagnostics or download the diagnostics CSV when a source needs correction. A recovery point is created immediately before the import is saved.</p>
       <button class="btn small" type="button" data-view="imports">Open Data Import</button>
     </section>
