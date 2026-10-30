@@ -208,13 +208,13 @@ test("workspace validation rejects unsafe IDs, score coercion, and pursuit bound
   );
 });
 
-test("legacy imports repair reciprocal evidence links before strict v3 validation", () => {
+test("legacy imports repair reciprocal evidence links before strict current-schema validation", () => {
   const legacy = workspaceFixture();
   legacy.schemaVersion = 2;
   legacy.evidence[0].criterionIds = [];
   assert.equal(engine.validateWorkspaceImport(legacy).valid, true);
   const migrated = engine.normalizeWorkspace(legacy, workspaceFixture());
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, engine.SCHEMA_VERSION);
   assert.deepEqual(migrated.evidence[0].criterionIds, ["cr1"]);
   assert.equal(engine.validateWorkspace(migrated).valid, true);
 

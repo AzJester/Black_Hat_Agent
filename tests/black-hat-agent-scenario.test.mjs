@@ -19,6 +19,7 @@ function scoredWorkspace(priorEstimate) {
         customer: "Scenario customer",
         playbook: "Competitive assessment",
         priorEstimate,
+        showScenarioEstimate: true,
         archived: false
       }
     ],
@@ -211,4 +212,17 @@ test("report scenario line survives a normalized workspace round trip", () => {
   assertBounded(report.scoreSummary.scenarioEstimate);
   assert.doesNotMatch(report.output, /NaN/);
   assert.match(report.output, /\*\*Scenario win estimate:\*\* \d+% \(\d+-\d+% uncertainty range/);
+});
+
+test("the report keeps the scenario estimate off unless the pursuit enables it", () => {
+  const workspace = scoredWorkspace(60);
+  delete workspace.pursuits[0].showScenarioEstimate;
+  const normalized = normalizeWorkspace(workspace, {});
+  assert.equal(normalized.pursuits[0].showScenarioEstimate, false);
+  const report = buildCompetitiveReport(normalized, "p1", {});
+  assert.match(report.output, /\*\*Scenario win estimate:\*\* Off for this pursuit/);
+  assert.doesNotMatch(report.output, /\d+% uncertainty range/);
+  assert.equal(report.showScenarioEstimate, false);
+  // The estimate is still calculated, so report-time visual snapshots stay consistent.
+  assertBounded(report.scoreSummary.scenarioEstimate);
 });

@@ -74,8 +74,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p _site
-          cp -- index.html app.js engine.js import-engine.js import-wizard.js \
-            visualizations.js spreadsheet-worker.js styles.css favicon.svg README.md _site/
+          cp -- index.html app.js engine.js assessment.js summary-import.js import-engine.js \
+            import-wizard.js visualizations.js spreadsheet-worker.js styles.css favicon.svg \
+            README.md _site/
           cp -R docs vendor fonts _site/
           touch _site/.nojekyll
 

@@ -15,6 +15,8 @@ const VIEWS = [
   ["criteria", "Evaluation Criteria"],
   ["evidence", "Evidence Room"],
   ["competitors", "Competitors"],
+  ["participants", "Participant Inputs"],
+  ["registers", "Black Hat Registers"],
   ["imports", "Data Import"],
   ["playbooks", "Playbook Library"],
   ["session", "Black Hat Session"],
@@ -25,8 +27,8 @@ const VIEWS = [
   ["guide", "User Guide"]
 ];
 const PURSUIT_SCOPED_VIEWS = [
-  "command", "opportunity", "criteria", "evidence", "competitors", "imports",
-  "session", "history", "outputs", "actions"
+  "command", "opportunity", "criteria", "evidence", "competitors", "participants", "registers",
+  "imports", "session", "history", "outputs", "actions"
 ];
 
 async function freshEmptyPage(page, hash = "") {

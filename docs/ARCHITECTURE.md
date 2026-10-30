@@ -10,6 +10,8 @@ GitHub Pages
       |-- styles.css
       |-- vendor/xlsx.full.min.js
       |-- engine.js: workspace validation and deterministic analysis
+      |-- assessment.js: work areas, participant inputs, roll-up, registers, quality checks
+      |-- summary-import.js: tagged competitor-summary (.docx) reader
       |-- import-engine.js: tabular mapping, diagnostics, and import plans
       |-- import-wizard.js: local file, worksheet, mapping, and preview UI
       |-- spreadsheet-worker.js: bounded, isolated Excel parsing
@@ -26,19 +28,34 @@ without accounts or secrets. Excel parsing uses the repository-bundled SheetJS C
 
 The browser stores one workspace document. Its principal record groups are:
 
-- **Pursuits** — opportunity framing, customer context, owner, lifecycle state,
-  priorities, and evaluation criteria.
-- **Evidence** — source name or URL, evidence type, confidence, observation, and a
-  stable citation identifier used in reports.
-- **Competitors** — competitive posture, strategy hypotheses, strengths,
+- **Pursuits**: opportunity framing, customer context, owner, lifecycle state,
+  priorities, work areas, the opt-in scenario-estimate flag, and an optional
+  worksheet example used by the copied-text check.
+- **Criteria**: weighted evaluation criteria, each assigned to one work area or
+  cross-cutting.
+- **Evidence**: source name or URL, locator, evidence basis (documented fact,
+  summary-stated, claimed, inference, personal experience, unknown), confidence,
+  observation, and a stable citation identifier used in reports.
+- **Competitors**: competitive posture, aliases, vehicle position, strategy
+  hypotheses, most likely and most dangerous plays, team hypothesis, strengths,
   weaknesses, and evaluation-criterion scores with rationale.
-- **Sessions** — facilitator, participants, notes, question, and selected playbook.
-- **Playbooks** — built-in facilitation lenses and user-created playbooks.
-- **Actions** — owner, due date, status, and follow-up work.
-- **Reports/runs** — generated report text, creation metadata, edits, and retained
+- **Participant inputs**: one participant's ranked competitor for one work area,
+  with label, confidence, evidence basis, rationale, source, and what would change
+  the view. The competitor link is optional so an unmatched name stays visible.
+- **Register items**: ghosting bank, questions for the room, risk register, and
+  price posture entries, distinguished by `kind`.
+- **Sessions**: facilitator, participants, notes, question, and selected playbook.
+- **Playbooks**: built-in facilitation lenses and user-created playbooks.
+- **Actions**: owner, due date, status, work area, evidence path, and follow-up
+  work.
+- **Reports/runs**: generated report text, creation metadata, edits, and retained
   versions, including a saved visualization snapshot.
-- **Snapshots** — bounded point-in-time copies used for local recovery.
-- **Workspace state** — active pursuit, current view, and supported schema version.
+- **Snapshots**: bounded point-in-time copies used for local recovery.
+- **Workspace state**: active pursuit, current view, and supported schema version.
+
+Schema 4 added participant inputs and register items. A workspace, snapshot, or
+import written before schema 4 has neither collection, which is read as empty;
+older evidence gets a basis derived from its classification.
 
 Pursuit-scoped records carry a pursuit identifier. Stable record identifiers keep
 evidence citations and report versions meaningful when a report is reopened. A
@@ -106,6 +123,31 @@ cannot be met. Legacy report text remains readable, but a report without a valid
 version 2 visual snapshot shows an explicit unavailability notice in the app and
 every visual export; current workspace data is never substituted into historical
 report text.
+
+## Work areas, participant inputs, and quality checks
+
+`calculateWorkAreaScores()` repeats the CPI calculation once per work area using that
+area's criteria plus the cross-cutting criteria, and reports ties. The overall CPI is
+unchanged. The scenario estimate is still calculated (report visual snapshots
+validate against it) but is shown only when the pursuit enables it.
+
+`summarizeParticipantInputs()` groups inputs by work area and competitor, orders
+competitors by first picks, then reciprocal-rank points, then mentions, and lists
+disagreements (different first picks, rank spread, confidence split, label split).
+`assessInputQuality()` returns deterministic warnings and notes; repeated notes of
+one kind are grouped. Competitor names are matched by `matchCompetitor()`: exact
+normalized name, then an alias, then a unique whole-word prefix.
+
+## Tagged summary import
+
+`summary-import.js` reads `word/document.xml` from a .docx of at most 5 MB, using
+the ZIP central directory and the browser's `DecompressionStream`, with a 20 MB
+ceiling on the decompressed XML that is enforced while inflating. No other part of
+the package is read, so macros, images, links, and embedded objects are never
+touched. A tokenizer flattens paragraphs and table rows (text in a nested table
+belongs only to the innermost cell), and each `[KNOWN|ASSESSED|CLAIMED|UNKNOWN · …]`
+tag becomes an evidence record attached to the text before it. The file is
+discarded after parsing; only the confirmed records are stored.
 
 ## Local Excel and CSV import
 

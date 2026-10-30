@@ -2,6 +2,7 @@ import {
   SCHEMA_VERSION,
   buildCompetitiveReport,
   calculateCompetitiveScores,
+  calculateWorkAreaScores,
   escapeHtml as esc,
   markdownToWordHtml,
   normalizeWorkspace,
@@ -17,6 +18,24 @@ import {
   downloadImportTemplate,
   openLocalImportWizard
 } from "./import-wizard.js";
+import {
+  EVIDENCE_BASES,
+  REGISTER_KINDS,
+  REGISTER_STATUSES,
+  RISK_LEVELS,
+  SEGMENT_LABELS,
+  TEAM_LIKELIHOODS,
+  assessInputQuality,
+  classificationForBasis,
+  competitorLabel,
+  matchCompetitor,
+  parseWorkAreas,
+  relinkParticipantInputs,
+  resolveWorkArea,
+  summarizeParticipantInputs,
+  workAreaKey
+} from "./assessment.js";
+import { MAX_SUMMARY_BYTES, readTaggedSummary } from "./summary-import.js";
 import {
   buildRunVisualizationSnapshot,
   buildVisualizationSpecs,
@@ -46,7 +65,9 @@ const COLLECTIONS = [
   "competitors",
   "actions",
   "playbooks",
-  "runs"
+  "runs",
+  "participantInputs",
+  "registerItems"
 ];
 const uid = () =>
   crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
@@ -64,7 +85,9 @@ const NAV_GROUPS = [
     entries: [
       ["criteria", "Evaluation Criteria"],
       ["evidence", "Evidence Room"],
-      ["competitors", "Competitors"]
+      ["competitors", "Competitors"],
+      ["participants", "Participant Inputs"],
+      ["registers", "Black Hat Registers"]
     ]
   },
   {
@@ -130,7 +153,7 @@ const frameBlocked = bustHostileFrame();
 
 const seed = {
   schemaVersion: SCHEMA_VERSION,
-  appVersion: "3.0.0",
+  appVersion: "4.0.0",
   createdAt: "2026-07-26T12:00:00.000Z",
   updatedAt: "2026-07-26T12:00:00.000Z",
   active: "p1",
@@ -153,6 +176,9 @@ const seed = {
       procurementContext:
         "Best-value evaluation with technical, management, past-performance, and cost considerations.",
       priorEstimate: 50,
+      workAreas: ["Test planning and execution", "Digital engineering"],
+      showScenarioEstimate: false,
+      exampleText: "",
       archived: false
     },
     {
@@ -204,7 +230,8 @@ const seed = {
       classification: "Inference",
       rationale: "Relevant experience is strong but proof must be tailored.",
       evidenceIds: ["e1"],
-      isGate: true
+      isGate: true,
+      workArea: "Digital engineering"
     },
     {
       id: "cr2",
@@ -243,7 +270,8 @@ const seed = {
       classification: "Inference",
       rationale: "Relevant references are expected to support the narrative.",
       evidenceIds: ["e1"],
-      isGate: false
+      isGate: false,
+      workArea: "Test planning and execution"
     },
     {
       id: "cr5",
@@ -323,6 +351,8 @@ const seed = {
       publishedAt: "2026-07-10",
       confidence: "Medium",
       classification: "Inference",
+      basis: "Summary-stated",
+      locator: "Section 2",
       stance: "Support",
       note:
         "Customer prioritizes integration speed, traceability, and credible transition planning.",
@@ -342,6 +372,8 @@ const seed = {
       publishedAt: "2026-06-12",
       confidence: "Low",
       classification: "Hypothesis",
+      basis: "Claimed",
+      locator: "",
       stance: "Challenge",
       note:
         "Likely competitor emphasizes scale, workforce access, and an incumbent-adjacent transition model.",
@@ -361,6 +393,8 @@ const seed = {
       publishedAt: "2026-07-02",
       confidence: "Medium",
       classification: "Inference",
+      basis: "Summary-stated",
+      locator: "",
       stance: "Support",
       note:
         "Evaluation likely rewards demonstrated mission outcomes over generic staffing depth.",
@@ -387,7 +421,14 @@ const seed = {
         "Prove named staffing pipelines and make mission-integration depth measurable.",
       classification: "Hypothesis",
       evidenceIds: ["e2"],
-      scores: { cr1: 3, cr2: 4, cr3: 5, cr4: 4, cr5: 3 }
+      scores: { cr1: 3, cr2: 4, cr3: 5, cr4: 4, cr5: 3 },
+      aliases: "Northstar, NMS",
+      mostLikelyPlay: "Prime with a large staffing bench and lead with transition confidence.",
+      mostDangerousPlay:
+        "Hire the incumbent's test leads and add a niche digital-engineering partner to close its integration gap.",
+      teamHypothesis: "Northstar prime with a regional test-range subcontractor",
+      teamLikelihood: "Speculative",
+      teamSource: "Black Hat discussion"
     },
     {
       id: "c2",
@@ -426,7 +467,9 @@ const seed = {
       due: "2026-08-04",
       status: "In progress",
       priority: "High",
-      finding: "Counter competitor transition positioning."
+      finding: "Counter competitor transition positioning.",
+      workArea: "Test planning and execution",
+      evidencePath: "Named transition leads and a 90-day plan reviewed by the customer liaison"
     },
     {
       id: "a3",
@@ -469,6 +512,122 @@ const seed = {
     }
   ],
   runs: [],
+  participantInputs: [
+    {
+      id: "pi1",
+      pursuitId: "p1",
+      participant: "Avery Lee",
+      workArea: "Test planning and execution",
+      rank: 1,
+      competitorId: "c2",
+      competitorName: "Vector Range Solutions",
+      segment: "Wildcard / niche or agile threat",
+      confidence: "Medium",
+      basis: "Summary-stated",
+      rationale: "Range familiarity gives it a credible test-execution story on day one.",
+      source: "Competitor summary, section 3",
+      gap: "Evidence of multi-domain test design rather than range operations only."
+    },
+    {
+      id: "pi2",
+      pursuitId: "p1",
+      participant: "Avery Lee",
+      workArea: "Test planning and execution",
+      rank: 2,
+      competitorId: "c1",
+      competitorName: "Northstar",
+      segment: "Heavyweight / volume threat",
+      confidence: "Medium",
+      basis: "Inference",
+      rationale: "Scale lets it staff any test order quickly.",
+      source: "",
+      gap: "Whether it will bid test-only orders."
+    },
+    {
+      id: "pi3",
+      pursuitId: "p1",
+      participant: "Jordan Patel",
+      workArea: "Test planning and execution",
+      rank: 1,
+      competitorId: "c1",
+      competitorName: "Northstar Mission Systems",
+      segment: "Heavyweight / volume threat",
+      confidence: "High",
+      basis: "Personal experience",
+      rationale: "Has staffed similar test programs quickly in the past.",
+      source: "",
+      gap: ""
+    },
+    {
+      id: "pi4",
+      pursuitId: "p1",
+      participant: "Jordan Patel",
+      workArea: "Test planning and execution",
+      rank: 3,
+      competitorId: "c2",
+      competitorName: "Vector Range",
+      segment: "Wildcard / niche or agile threat",
+      confidence: "Low",
+      basis: "Inference",
+      rationale: "Too small to carry a full order.",
+      source: "",
+      gap: "Teaming announcements."
+    }
+  ],
+  registerItems: [
+    {
+      id: "rg1",
+      pursuitId: "p1",
+      kind: "ghost",
+      competitorId: "c1",
+      workArea: "",
+      title: "\"Our scale guarantees staffing.\"",
+      detail: "Named, cleared staff available at transition, with retention history.",
+      response: "Show named transition leads and a retention record.",
+      level: "",
+      owner: "",
+      status: "Open"
+    },
+    {
+      id: "rg2",
+      pursuitId: "p1",
+      kind: "question",
+      competitorId: "c2",
+      workArea: "Test planning and execution",
+      title: "Has Vector Range led multi-domain test design, or only range operations?",
+      detail: "Range and test experience; public information only",
+      response: "",
+      level: "",
+      owner: "",
+      status: "Open"
+    },
+    {
+      id: "rg3",
+      pursuitId: "p1",
+      kind: "risk",
+      competitorId: "",
+      workArea: "",
+      title: "Surge staffing depth is unverified",
+      detail: "Staffing",
+      response: "Confirm named surge bench and contingent offers.",
+      level: "High",
+      owner: "Capture Lead",
+      status: "Open"
+    },
+    {
+      id: "rg4",
+      pursuitId: "p1",
+      kind: "price",
+      competitorId: "",
+      workArea: "Digital engineering",
+      title: "Senior modeling labor; tool licenses",
+      detail: "A competitor that owns its tools can price licenses below ours.",
+      response: "Price licenses as government-furnished where allowed.",
+      level: "",
+      owner: "",
+      status: "Open"
+    }
+  ],
   snapshots: []
 };
 
@@ -488,6 +647,9 @@ let staleWorkspace = false;
 // from a workspace this tab no longer holds must be refused rather than applied.
 let importPlanBaseline = null;
 let modalTrigger = null;
+// A parsed competitor summary waiting for the user to confirm it in the preview dialog,
+// with the workspace it was parsed against so a stale preview is never applied.
+let pendingSummaryImport = null;
 const listState = Object.fromEntries(
   ["criteria", "evidence", "competitors", "actions"].map(name => [
     name,
@@ -514,6 +676,8 @@ function emptyWorkspace() {
       actions: [],
       playbooks: structuredClone(seed.playbooks),
       runs: [],
+      participantInputs: [],
+      registerItems: [],
       snapshots: []
     },
     seed
@@ -1032,6 +1196,10 @@ function command() {
   const stale = sourceReports.filter(
     run => run.sourceHash && run.sourceHash !== workspaceInputHash(data, active.id)
   ).length;
+  const participantSummary = summarizeParticipantInputs(data, active.id);
+  const qualityWarnings = assessInputQuality(data, active.id).filter(
+    item => item.severity === "warning"
+  ).length;
   return `<div class="hero">
     <div><p class="eyebrow">COMMAND CENTER</p><h1>${esc(active.name)}</h1><p>${esc(
       active.summary
@@ -1039,11 +1207,16 @@ function command() {
     <button class="btn primary" data-view="session">Run competitive analysis</button>
   </div>
   <div class="metrics">
-    ${metric("OUR CPI", scores.totalWeight ? formatCpi(scores.us.cpi, "N/A") : "N/A")}
+    ${metric("OVERALL INDEX", scores.totalWeight ? formatCpi(scores.us.cpi, "N/A") : "N/A")}
     ${metric("EVIDENCE COVERAGE", `${scores.us.coverage}%`)}
-    ${metric("CONFIDENCE", `${scores.us.confidence}%`)}
-    ${metric("SCENARIO ESTIMATE", scores.scenarioEstimate ? `${scores.scenarioEstimate.value}%*` : "N/A")}
+    ${metric("PARTICIPANT INPUTS", participantSummary.totalInputs)}
+    ${
+      active.showScenarioEstimate
+        ? metric("SCENARIO ESTIMATE", scores.scenarioEstimate ? `${scores.scenarioEstimate.value}%*` : "N/A")
+        : metric("INPUT WARNINGS", qualityWarnings)
+    }
   </div>
+  ${workAreaPanel(active)}
   <div class="two-col">
     <section class="panel"><h2>Competitive readiness</h2>
       ${readinessList(scores)}
@@ -1060,12 +1233,53 @@ function command() {
       : ""
   }
   <div class="visualization-grid visual-grid">
-    ${chartPanel(visuals.scenarioRange, { idPrefix: "command-scenario" })}
+    ${active.showScenarioEstimate ? chartPanel(visuals.scenarioRange, { idPrefix: "command-scenario" }) : ""}
     ${chartPanel(visuals.criterionDeltas, {
       wide: true,
       idPrefix: "command-criterion-deltas"
     })}
   </div>`;
+}
+
+// Competitors compared within each work area, from entered scores and from the
+// participants' ranked picks. The overall index stays available but is not the lead.
+function workAreaPanel(active) {
+  const areaScores = calculateWorkAreaScores(data, active.id);
+  const picks = summarizeParticipantInputs(data, active.id).areas;
+  if (!areaScores.length && !picks.some(item => item.rows.length)) {
+    return `<section class="panel"><h2>Work-area view</h2><p class="muted">No work areas are defined. Add them in Opportunity to compare competitors by order type instead of as one field.</p><div class="row"><button class="btn small" data-view="opportunity">Define work areas</button></div></section>`;
+  }
+  const names = [
+    ...areaScores.map(item => item.workArea),
+    ...picks
+      .map(item => item.workArea)
+      .filter(name => !areaScores.some(score => workAreaKey(score.workArea) === workAreaKey(name)))
+  ];
+  return `<section class="panel"><h2>Work-area view</h2>
+    <p class="muted">Each row compares competitors inside one work area. Scores use that area's criteria plus cross-cutting criteria; participant picks come from Participant Inputs.</p>
+    <div class="table-wrap"><table><caption>Leaders by work area</caption><thead><tr><th scope="col">Work area</th><th scope="col">Score leader</th><th scope="col">Our index</th><th scope="col">Participants' top picks</th><th scope="col">Disagreements</th></tr></thead><tbody>${names
+      .map(name => {
+        const score = areaScores.find(item => workAreaKey(item.workArea) === workAreaKey(name));
+        const pick = picks.find(item => workAreaKey(item.workArea) === workAreaKey(name));
+        return `<tr><th scope="row">${esc(name || "Unassigned")}</th><td>${
+          score?.leader
+            ? `${esc(score.leaders.map(item => item.name).join(", "))} (${esc(score.leader.cpi)}/100${
+                score.leaders.length > 1 ? ", tied" : ""
+              })`
+            : `<span class="muted">${score ? "Not scored" : "No criteria"}</span>`
+        }</td><td>${score?.us ? formatCpi(score.us.cpi, "Unknown") : "Unknown"}</td><td>${
+          pick?.top.length
+            ? esc(pick.top.map(item => `${item.name} (${item.firstPicks} first)`).join(", "))
+            : `<span class="muted">No inputs</span>`
+        }</td><td>${
+          pick?.disagreements.length
+            ? `<span class="tag danger">${pick.disagreements.length}</span>`
+            : `<span class="muted">0</span>`
+        }</td></tr>`;
+      })
+      .join("")}</tbody></table></div>
+    <div class="row"><button class="btn small" data-view="participants">Open Participant Inputs</button><button class="btn small" data-view="criteria">Assign criteria to work areas</button></div>
+  </section>`;
 }
 
 function opportunity() {
@@ -1088,9 +1302,18 @@ function opportunity() {
     ${textField("decisionDate", "Anticipated decision", active.decisionDate, false, "date")}
     ${textField("contractValue", "Value / context", active.contractValue)}
     ${textField("priorEstimate", "Baseline scenario estimate (%)", active.priorEstimate, false, "number", 'min="5" max="95"')}
+    <div class="field checkbox-field"><label><input type="checkbox" name="showScenarioEstimate" ${
+      active.showScenarioEstimate ? "checked" : ""
+    }> Show the scenario win estimate</label><small>Off by default. It is a planning number built from entered scores, not a forecast, and it tends to replace the work-area comparison in discussion.</small></div>
     ${textareaField("summary", "Opportunity summary", active.summary)}
     ${textareaField("ourPosition", "Our current position", active.ourPosition)}
     ${textareaField("procurementContext", "Procurement and evaluation context", active.procurementContext)}
+    <div class="field full"><label for="field-workAreas">Work areas (one per line)</label><textarea id="field-workAreas" name="workAreas" placeholder="C-UAS as a Service\nSystem Integration\nRDT&amp;E Support">${esc(
+      (active.workAreas || []).join("\n")
+    )}</textarea><small>Order types or service lines. Criteria, participant inputs, actions, and price posture are compared within each work area.</small></div>
+    <div class="field full"><label for="field-exampleText">Worksheet example response (optional)</label><textarea id="field-exampleText" name="exampleText">${esc(
+      active.exampleText || ""
+    )}</textarea><small>Paste the example from the participant instructions. Inputs that repeat it are flagged.</small></div>
     <div class="field full"><button class="btn primary">Save opportunity</button></div>
   </form>`;
 }
@@ -1108,7 +1331,7 @@ function criteriaView() {
   const result = pagedRecords(
     "criteria",
     rows,
-    item => `${item.name} ${item.category} ${item.description} ${item.classification}`,
+    item => `${item.name} ${item.workArea} ${item.category} ${item.description} ${item.classification}`,
     {
       "weight-desc": (a, b) => Number(b.weight || 0) - Number(a.weight || 0),
       name: (a, b) => a.name.localeCompare(b.name),
@@ -1134,12 +1357,12 @@ function criteriaView() {
     }</p>
     ${
       result.items.length
-        ? `<div class="table-wrap table-sticky sticky-first"><table><caption>Evaluation criteria and current scores</caption><thead><tr><th scope="col">Criterion</th><th scope="col">Category</th><th scope="col">Weight</th><th scope="col">Our score</th><th scope="col">Classification</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead><tbody>
+        ? `<div class="table-wrap table-sticky sticky-first"><table><caption>Evaluation criteria and current scores</caption><thead><tr><th scope="col">Criterion</th><th scope="col">Work area</th><th scope="col">Category</th><th scope="col">Weight</th><th scope="col">Our score</th><th scope="col">Classification</th><th scope="col">Evidence</th><th scope="col">Actions</th></tr></thead><tbody>
           ${result.items
             .map(
               item => `<tr>
                 <th scope="row"><strong>${esc(item.name)}</strong>${item.isGate ? ` <span class="tag danger">GATE</span>` : ""}<small class="block">${esc(item.description)}</small></th>
-                <td>${esc(item.category)}</td><td>${esc(item.weight)}</td><td>${scoreCell(item.ourScore)}</td>
+                <td>${esc(item.workArea || "All work areas")}</td><td>${esc(item.category)}</td><td>${esc(item.weight)}</td><td>${scoreCell(item.ourScore)}</td>
                 <td>${classificationTag(item.classification)}</td><td>${item.evidenceIds.length}</td>
                 <td>${rowActions("criteria", item.id, `criterion ${item.name}`)}</td>
               </tr>`
@@ -1170,7 +1393,7 @@ function evidenceView() {
     "evidence",
     rows,
     item =>
-      `${item.citation} ${item.title} ${item.source} ${item.note} ${item.classification} ${item.stance}`,
+      `${item.citation} ${item.title} ${item.source} ${item.locator} ${item.note} ${item.basis} ${item.classification} ${item.stance}`,
     {
       "date-desc": (a, b) => String(b.publishedAt || "").localeCompare(String(a.publishedAt || "")),
       citation: (a, b) => String(a.citation).localeCompare(String(b.citation)),
@@ -1182,8 +1405,9 @@ function evidenceView() {
     "EVIDENCE ROOM",
     "Source-linked evidence register",
     "Treat each record as one atomic claim. Label whether it supports, challenges, or contextualizes a judgment.",
-    `<button class="btn primary" data-add="evidence">Add evidence</button>`
+    `<div class="row"><button class="btn primary" data-add="evidence">Add evidence</button><button class="btn" type="button" data-action="summary-import">Import tagged summary (.docx)</button></div>`
   )}
+  <input id="summaryImportFile" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-label="Import tagged competitor summary" hidden>
   <div class="visualization-grid visual-grid">
     ${chartPanel(visuals.evidenceGrid, { idPrefix: "evidence-grid" })}
     ${chartPanel(visuals.evidenceRelationships, {
@@ -1206,12 +1430,14 @@ function evidenceView() {
                 .filter(criterion => item.criterionIds.includes(criterion.id))
                 .map(criterion => criterion.name);
               return `<article class="evidence-item">
-                <div><span class="citation">[${esc(item.citation)}]</span> ${classificationTag(
-                  item.classification
+                <div><span class="citation">[${esc(item.citation)}]</span> ${basisTag(
+                  item.basis
                 )} <span class="tag">${esc(item.stance)}</span></div>
                 <h3>${esc(item.title)}</h3>
                 <p>${esc(item.note)}</p>
-                <div class="evidence-meta"><span>Source: ${esc(item.source)}</span><span>${esc(
+                <div class="evidence-meta"><span>Source: ${esc(item.source)}${
+                  item.locator ? ` · ${esc(item.locator)}` : ""
+                }</span><span>${esc(
                   item.confidence
                 )} confidence</span><span>${esc(item.publishedAt || "No date")}</span></div>
                 ${linked.length ? `<small>Linked criteria: ${esc(linked.join(", "))}</small>` : `<small>No criteria linked</small>`}
@@ -1288,6 +1514,12 @@ function competitorsView() {
             <p><strong>Strengths:</strong> ${esc(item.strengths || "Not recorded")}</p>
             <p><strong>Weaknesses:</strong> ${esc(item.weaknesses || "Not recorded")}</p>
             <p><strong>Ghosting themes:</strong> ${esc(item.ghosting || "Not recorded")}</p>
+            <p><strong>Most likely play:</strong> ${esc(item.mostLikelyPlay || "Not recorded")}</p>
+            <p><strong>Most dangerous play:</strong> ${esc(item.mostDangerousPlay || "Not recorded")}</p>
+            <p><strong>Team hypothesis (${esc(item.teamLikelihood || "Unknown")}):</strong> ${esc(
+              item.teamHypothesis || "Not recorded"
+            )}</p>
+            ${item.aliases ? `<small class="block">Also matched as: ${esc(item.aliases)}</small>` : ""}
             ${rowActions("competitors", item.id, `competitor ${item.name}`)}
           </article>`;
         })
@@ -1301,7 +1533,7 @@ function competitorsView() {
   </div>
   ${pagination("competitors", competitorResult)}
   <section class="panel matrix-panel"><h2>Scoring matrix</h2>
-    <p class="muted">Scores use a 1–5 scale. Competitive Position Index (CPI) is normalized to 100 and is not a win probability.</p>
+    <p class="muted">Scores use a 1–5 scale. The Competitive Position Index (CPI) combines every work area and is not a win probability; compare competitors by work area in the Command Center first.</p>
     ${
       criteria.length
         ? `<div class="table-wrap table-sticky sticky-first comparison-table"><table><caption>Weighted criterion scores for the visible competitors</caption><thead><tr><th scope="col">Criterion</th><th scope="col">Weight</th><th scope="col">Our team</th>${visibleCompetitors
@@ -1332,6 +1564,167 @@ function competitorsView() {
   </section>`;
 }
 
+function participantsView() {
+  const active = pursuit();
+  if (!active) {
+    return noPursuitPanel(
+      "PARTICIPANT INPUTS",
+      "Each participant's view, by work area",
+      "Record who ranked which competitor, with what label, confidence, and evidence basis, then resolve the disagreements before rolling up."
+    );
+  }
+  const summary = summarizeParticipantInputs(data, active.id);
+  const findings = assessInputQuality(data, active.id);
+  const competitorById = new Map(scoped("competitors").map(item => [item.id, item]));
+  const areaPanels = summary.areas
+    .map(area => {
+      const name = area.workArea || "Unassigned work area";
+      return `<section class="panel participant-area"><h2>${esc(name)}</h2>
+        ${
+          area.rows.length
+            ? `<div class="two-col">
+            <div><h3>Roll-up</h3><ol class="rollup-list">${area.top
+              .map(
+                item =>
+                  `<li><strong>${esc(item.name)}</strong>${
+                    item.linked ? "" : ` <span class="tag danger">UNMATCHED</span>`
+                  }<small class="block">${esc(
+                    `${item.firstPicks} first pick${item.firstPicks === 1 ? "" : "s"} · ${item.points} pts · ${item.mentions} mention${item.mentions === 1 ? "" : "s"}`
+                  )}</small></li>`
+              )
+              .join("")}</ol></div>
+            <div><h3>Where participants disagree</h3>${
+              area.disagreements.length
+                ? `<ul class="disagreement-list">${area.disagreements
+                    .map(item => `<li>${esc(item.message)}</li>`)
+                    .join("")}</ul>`
+                : `<p class="muted">No disagreement detected.</p>`
+            }</div>
+          </div>
+          <div class="table-wrap table-sticky sticky-first"><table><caption>Inputs for ${esc(name)}</caption><thead><tr><th scope="col">Participant</th><th scope="col">Rank</th><th scope="col">Competitor</th><th scope="col">Label</th><th scope="col">Confidence</th><th scope="col">Basis</th><th scope="col">Why / source / what changes it</th><th scope="col">Actions</th></tr></thead><tbody>${area.rows
+            .map(
+              row => `<tr><th scope="row">${esc(row.participant)}</th><td>${
+                row.rank ? `#${esc(row.rank)}` : "Unranked"
+              }</td><td>${esc(competitorLabel(row, competitorById))}${
+                competitorById.has(row.competitorId)
+                  ? ""
+                  : ` <span class="tag danger">UNMATCHED</span>`
+              }${
+                competitorById.has(row.competitorId) && row.competitorName &&
+                row.competitorName !== competitorById.get(row.competitorId).name
+                  ? `<small class="block">Entered as "${esc(row.competitorName)}"</small>`
+                  : ""
+              }</td><td>${esc(row.segment || "None")}</td><td>${esc(row.confidence || "Not stated")}</td><td>${basisTag(
+                row.basis
+              )}</td><td>${esc(row.rationale || "")}${
+                row.source ? `<small class="block">Source: ${esc(row.source)}</small>` : ""
+              }${row.gap ? `<small class="block">Changes the view: ${esc(row.gap)}</small>` : ""}</td><td>${rowActions(
+                "participantInputs",
+                row.id,
+                `input from ${row.participant} on ${competitorLabel(row, competitorById)}`
+              )}</td></tr>`
+            )
+            .join("")}</tbody></table></div>`
+            : `<p class="muted">No inputs recorded for this work area.</p>`
+        }
+      </section>`;
+    })
+    .join("");
+  return `${sectionHero(
+    "PARTICIPANT INPUTS",
+    "Each participant's view, by work area",
+    "Record who ranked which competitor, with what label, confidence, and evidence basis. Disagreements are listed for the room to resolve, not averaged away.",
+    `<div class="row"><button class="btn primary" data-add="participantInputs">Add input</button><button class="btn" type="button" data-action="tabular-import">Import session workbook</button></div>`
+  )}
+  <div class="metrics">
+    ${metric("INPUTS", summary.totalInputs)}
+    ${metric("PARTICIPANTS", summary.participants.length)}
+    ${metric("UNMATCHED NAMES", summary.unmatched.length)}
+    ${metric("DISAGREEMENTS", summary.areas.reduce((sum, item) => sum + item.disagreements.length, 0))}
+  </div>
+  ${
+    summary.unmatched.length
+      ? `<p class="note warn">${summary.unmatched.length} input${
+          summary.unmatched.length === 1 ? " names a competitor" : "s name competitors"
+        } not matched to a record: ${esc(
+          [...new Set(summary.unmatched.map(item => item.competitorName))].join(", ")
+        )}. Add the spelling as an alias on the right competitor, then match again. <button class="btn small" type="button" data-action="relink-inputs">Match names again</button></p>`
+      : ""
+  }
+  ${areaPanels || `<div class="empty">No participant inputs yet. Add them one at a time, or import the session workbook (Participant inputs destination). <button class="btn small" data-add="participantInputs">Add input</button></div>`}
+  ${qualityPanel(findings)}`;
+}
+
+function qualityPanel(findings) {
+  const warnings = findings.filter(item => item.severity === "warning");
+  const notes = findings.filter(item => item.severity === "info");
+  return `<section class="panel quality-panel"><h2>Input quality checks</h2>
+    <p class="muted">Deterministic checks for unsourced high confidence, labels that break their definitions, copied text, self-contradiction, unmatched names, and open actions without an owner, due date, or evidence path.</p>
+    ${
+      findings.length
+        ? `<ul class="quality-list">${warnings
+            .map(item => `<li class="warn"><strong>${esc(item.area)}:</strong> ${esc(item.message)}</li>`)
+            .join("")}${notes
+            .map(item => `<li><span class="muted">${esc(item.area)}:</span> ${esc(item.message)}</li>`)
+            .join("")}</ul>`
+        : `<p>No issues detected.</p>`
+    }
+  </section>`;
+}
+
+function registersView() {
+  const active = pursuit();
+  if (!active) {
+    return noPursuitPanel(
+      "BLACK HAT REGISTERS",
+      "Ghosts, questions, risks, and price posture",
+      "Structured registers that feed the report."
+    );
+  }
+  const competitorById = new Map(scoped("competitors").map(item => [item.id, item]));
+  const items = scoped("registerItems");
+  const panels = Object.entries(REGISTER_KINDS)
+    .map(([kind, meta]) => {
+      const rows = items.filter(item => item.kind === kind);
+      const firstColumn = kind === "price" ? "Work area" : kind === "risk" ? "Level" : "Competitor";
+      return `<section class="panel register-panel" aria-labelledby="register-${kind}"><div class="report-heading"><h2 id="register-${kind}">${esc(
+        meta.label
+      )}</h2><button class="btn small" type="button" data-add-register="${kind}">Add ${esc(meta.singular)}</button></div>
+      ${
+        rows.length
+          ? `<div class="table-wrap"><table><caption>${esc(meta.label)}</caption><thead><tr><th scope="col">${esc(
+              firstColumn
+            )}</th><th scope="col">${esc(meta.title)}</th><th scope="col">${esc(meta.detail)}</th><th scope="col">${esc(
+              meta.response
+            )}</th>${kind === "question" ? `<th scope="col">Status</th>` : ""}${
+              kind === "risk" ? `<th scope="col">Owner</th>` : ""
+            }<th scope="col">Actions</th></tr></thead><tbody>${rows
+              .map(
+                row => `<tr><td>${esc(
+                  kind === "price"
+                    ? row.workArea || "All work areas"
+                    : kind === "risk"
+                      ? row.level || "Not rated"
+                      : competitorById.get(row.competitorId)?.name || "Any"
+                )}</td><th scope="row">${esc(row.title)}</th><td>${esc(row.detail || "")}</td><td>${esc(
+                  row.response || ""
+                )}</td>${kind === "question" ? `<td>${esc(row.status || "Open")}</td>` : ""}${
+                  kind === "risk" ? `<td>${esc(row.owner || "Unassigned")}</td>` : ""
+                }<td>${rowActions("registerItems", row.id, `${meta.singular} ${row.title}`)}</td></tr>`
+              )
+              .join("")}</tbody></table></div>`
+          : `<p class="muted">No entries yet.</p>`
+      }</section>`;
+    })
+    .join("");
+  return `${sectionHero(
+    "BLACK HAT REGISTERS",
+    "Ghosts, questions, risks, and price posture",
+    "Each register feeds its own report section. Ghosts name the evidence an evaluator should demand; questions name who can answer them.",
+    ""
+  )}${panels}`;
+}
+
 function importsView() {
   if (!pursuit()) {
     // The Pursuits destination needs no active pursuit, so the wizard stays reachable
@@ -1355,7 +1748,9 @@ function importsView() {
       <div class="import-target-list">
         <span>Pursuits</span><span>Evaluation criteria</span><span>Evidence</span>
         <span>Competitors</span><span>Competitor scores</span><span>Actions</span>
+        <span>Participant inputs</span>
       </div>
+      <p>For a session workbook, choose <strong>Participant inputs</strong>. Blank participant and work-area cells repeat the row above, rows without a rank are ranked in sheet order, and competitor names are matched to records by name, alias, or a unique leading word. Tagged competitor summaries (.docx) are imported from the Evidence Room.</p>
       <p>Imports can add new records, update matching records, or replace one record type inside the active pursuit. Replace operations require explicit confirmation.</p>
       <div class="row">
         <button class="btn primary" data-action="tabular-import">Choose Excel or CSV</button>
@@ -1395,26 +1790,38 @@ function guideView() {
     [
       "opportunity",
       "Frame the opportunity",
-      "Record the customer, acquisition context, priorities, decision dates, and your current position.",
+      "Record the customer, acquisition context, and your current position, and list the work areas (order types or service lines) competitors will be compared within.",
       "Open Opportunity"
     ],
     [
       "criteria",
       "Define how the customer will evaluate",
-      "Add weighted criteria, gates, your current scores, and the rationale behind each judgment.",
+      "Add weighted criteria, gates, your current scores, and the rationale behind each judgment. Assign each criterion to a work area, or leave it cross-cutting.",
       "Open Evaluation Criteria"
     ],
     [
       "evidence",
       "Build the evidence base",
-      "Capture sources, confidence, classification, stance, and links to the criteria each source supports.",
+      "Capture each claim's source, locator, evidence basis (documented fact, summary-stated, claimed, inference, personal experience, or unknown), confidence, and stance. Tagged competitor summaries import directly from Word.",
       "Open Evidence Room"
     ],
     [
       "competitors",
       "Assess likely competitors",
-      "Describe each competitor and score everyone against the same customer evaluation criteria.",
+      "Describe each competitor, its most likely and most dangerous play, and its team hypothesis. Record other spellings as aliases, then score everyone against the same criteria.",
       "Open Competitors"
+    ],
+    [
+      "participants",
+      "Collect each participant's view",
+      "Record or import each participant's ranked competitors per work area with label, confidence, and evidence basis. Resolve the listed disagreements and quality warnings before rolling up.",
+      "Open Participant Inputs"
+    ],
+    [
+      "registers",
+      "Fill the Black Hat registers",
+      "Write the ghosting bank, questions for the room, risk register, and price posture by work area. Each register becomes a report section.",
+      "Open Black Hat Registers"
     ],
     [
       "imports",
@@ -1443,7 +1850,7 @@ function guideView() {
   )}
   <section class="panel guide-panel" aria-labelledby="guideWorkflowHeading">
     <div class="report-heading">
-      <div><p class="eyebrow">RECOMMENDED WORKFLOW</p><h2 id="guideWorkflowHeading">Build the analysis in eight steps</h2></div>
+      <div><p class="eyebrow">RECOMMENDED WORKFLOW</p><h2 id="guideWorkflowHeading">Build the analysis in ten steps</h2></div>
       <span class="tag good">START HERE</span>
     </div>
     <ol class="guide-steps">
@@ -1496,7 +1903,7 @@ function guideView() {
     <section class="panel guide-card">
       <p class="eyebrow">READING THE VISUALS</p>
       <h2>Compare position, evidence, uncertainty, and action</h2>
-      <p>Charts across the workspace show CPI ranking, score gaps, scenario range, evidence coverage and relationships, run trends, and action status. Select <strong>View accessible data table</strong> for exact values.</p>
+      <p>The Command Center leads with competitors compared inside each work area. Charts show the overall CPI ranking, score gaps, evidence coverage and relationships, run trends, and action status. The scenario estimate is off unless the pursuit turns it on in Opportunity. Select <strong>View accessible data table</strong> for exact values.</p>
       <p><strong>Unknown</strong> means a value is missing; the application never silently treats it as zero. Generated reports preserve a report-time visual snapshot.</p>
       <button class="btn small" type="button" data-view="command">Open Command Center</button>
     </section>
@@ -1563,6 +1970,14 @@ function sessionView() {
     ""
   )}
   ${blocked ? `<p class="note danger">Add at least one weighted evaluation criterion before generating a report.</p>` : ""}
+  ${(() => {
+    const warnings = assessInputQuality(data, active.id).filter(item => item.severity === "warning");
+    return warnings.length
+      ? `<p class="note warn">${warnings.length} input-quality warning${
+          warnings.length === 1 ? "" : "s"
+        } will be listed in the report. <button class="btn small" type="button" data-view="participants">Review in Participant Inputs</button></p>`
+      : "";
+  })()}
   <form class="panel form-grid" data-form="run">
     ${selectField(
       "playbook",
@@ -1571,7 +1986,11 @@ function sessionView() {
       active.playbook
     )}
     ${textField("facilitator", "Facilitator", "Public workspace facilitator")}
-    ${textField("participants", "Participants", "")}
+    ${textField(
+      "participants",
+      "Participants (comma separated)",
+      summarizeParticipantInputs(data, active.id).participants.join(", ")
+    )}
     ${selectField("reportStatus", "Initial report status", ["Draft", "In review"], "Draft")}
     ${textareaField(
       "question",
@@ -1684,7 +2103,8 @@ function actionsView() {
   const result = pagedRecords(
     "actions",
     rows,
-    item => `${item.priority} ${item.title} ${item.finding} ${item.owner} ${item.status}`,
+    item =>
+      `${item.priority} ${item.title} ${item.finding} ${item.owner} ${item.status} ${item.workArea} ${item.evidencePath}`,
     {
       priority: (a, b) =>
         (priorityOrder[a.priority] ?? 9) - (priorityOrder[b.priority] ?? 9) ||
@@ -1698,7 +2118,7 @@ function actionsView() {
   return `${sectionHero(
     "ACTION REGISTER",
     "Prioritized mitigation and intelligence actions",
-    "Convert vulnerabilities, proof gaps, and unanswered questions into accountable work.",
+    "Convert vulnerabilities, proof gaps, and unanswered questions into accountable work. Close the session only when each material issue has an owner, a due date, and an evidence path.",
     `<button class="btn primary" data-add="actions">Add action</button>`
   )}
   <div class="visualization-grid visual-grid">
@@ -1713,16 +2133,22 @@ function actionsView() {
     ])}
     ${
     result.items.length
-      ? `<div class="table-wrap table-sticky sticky-first"><table><caption>Mitigation and intelligence actions</caption><thead><tr><th scope="col">Priority</th><th scope="col">Action</th><th scope="col">Owner</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>${result.items
+      ? `<div class="table-wrap table-sticky sticky-first"><table><caption>Mitigation and intelligence actions</caption><thead><tr><th scope="col">Priority</th><th scope="col">Action</th><th scope="col">Owner</th><th scope="col">Due</th><th scope="col">Evidence path</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>${result.items
           .map(
             item =>
               `<tr><td><span class="tag ${item.priority === "Critical" ? "danger" : ""}">${esc(
                 item.priority
               )}</span></td><td><strong>${esc(item.title)}</strong><small class="block">${esc(
                 item.finding
-              )}</small></td><td>${esc(item.owner || "Unassigned")}</td><td>${esc(
+              )}${item.workArea ? ` · ${esc(item.workArea)}` : ""}</small></td><td>${esc(item.owner || "Unassigned")}</td><td>${esc(
                 item.due || "TBD"
-              )}</td><td>${esc(item.status)}</td><td>${rowActions(
+              )}</td><td>${
+                item.evidencePath
+                  ? esc(item.evidencePath)
+                  : item.status === "Complete"
+                    ? `<span class="muted">Not set</span>`
+                    : `<span class="tag danger">NOT SET</span>`
+              }</td><td>${esc(item.status)}</td><td>${rowActions(
                 "actions",
                 item.id,
                 `action ${item.title}`
@@ -1819,6 +2245,8 @@ function render() {
     criteria: criteriaView,
     evidence: evidenceView,
     competitors: competitorsView,
+    participants: participantsView,
+    registers: registersView,
     imports: importsView,
     playbooks: playbooksView,
     session: sessionView,
@@ -1891,6 +2319,7 @@ function recordForm(kind, record = {}) {
         textField("name", "Criterion name", record.name, true),
         textField("category", "Category", record.category || "Technical", true),
         textField("weight", "Weight", record.weight ?? 10, true, "number", 'min="1" max="100"'),
+        workAreaField(record.workArea, "All work areas (cross-cutting)"),
         selectField("ourScore", "Our score", ["", "1", "2", "3", "4", "5"], String(record.ourScore ?? "")),
         selectField(
           "classification",
@@ -1923,12 +2352,8 @@ function recordForm(kind, record = {}) {
           record.type || "Customer"
         ),
         selectField("confidence", "Confidence", ["High", "Medium", "Low"], record.confidence || "Medium"),
-        selectField(
-          "classification",
-          "Classification",
-          ["Confirmed", "Inference", "Hypothesis", "Conflicting"],
-          record.classification || "Hypothesis"
-        ),
+        selectField("basis", "Evidence basis", EVIDENCE_BASES, record.basis || "Inference"),
+        textField("locator", "Locator (page, section, or record ID)", record.locator),
         selectField("stance", "Stance", ["Support", "Challenge", "Context", "Neutral"], record.stance || "Neutral"),
         textareaField("note", "Claim, excerpt, or analyst note", record.note),
         multiCriteriaField(record.criterionIds || []),
@@ -1978,6 +2403,13 @@ function recordForm(kind, record = {}) {
         textareaField("strategy", "Likely strategy", record.strategy),
         textareaField("ghosting", "Likely ghosting themes", record.ghosting),
         textareaField("counterMoves", "Counter-positioning", record.counterMoves),
+        textField("aliases", "Other names and spellings (comma separated)", record.aliases),
+        textField("vehiclePosition", "Vehicle position", record.vehiclePosition),
+        textareaField("mostLikelyPlay", "Most likely play", record.mostLikelyPlay),
+        textareaField("mostDangerousPlay", "Most dangerous play", record.mostDangerousPlay),
+        textField("teamHypothesis", "Team hypothesis (prime and partners)", record.teamHypothesis),
+        selectField("teamLikelihood", "Team likelihood", TEAM_LIKELIHOODS, record.teamLikelihood || "Unknown"),
+        textField("teamSource", "Team hypothesis source", record.teamSource),
         multiEvidenceField(record.evidenceIds || []),
         `<div class="field full"><h3>Criterion scores</h3><p class="form-help">1 materially fails · 3 meets requirement · 5 exceptional proven discriminator · blank unknown</p></div>`,
         scoreFields || `<p class="note full">Add evaluation criteria before scoring this competitor.</p>`
@@ -1994,7 +2426,75 @@ function recordForm(kind, record = {}) {
         textField("due", "Due date", record.due, false, "date"),
         selectField("priority", "Priority", ["Critical", "High", "Medium", "Low"], record.priority || "Medium"),
         selectField("status", "Status", ["Open", "In progress", "Blocked", "Complete"], record.status || "Open"),
-        textareaField("finding", "Finding or gap addressed", record.finding)
+        workAreaField(record.workArea, "All work areas"),
+        textareaField("finding", "Finding or gap addressed", record.finding),
+        textareaField("evidencePath", "Evidence path (what will show this is closed)", record.evidencePath)
+      ].join("")
+    );
+  }
+  if (kind === "participantInputs") {
+    const competitors = scoped("competitors");
+    return formShell(
+      kind,
+      record.id,
+      [
+        textField("participant", "Participant", record.participant, true),
+        workAreaField(record.workArea, "No work area"),
+        textField("rank", "Rank (1 = strongest)", record.rank ?? 1, false, "number", 'min="1" max="99"'),
+        `<div class="field"><label for="field-competitorId">Competitor</label><select id="field-competitorId" name="competitorId"><option value="">Not matched (use the name below)</option>${competitors
+          .map(
+            item =>
+              `<option value="${esc(item.id)}" ${item.id === record.competitorId ? "selected" : ""}>${esc(
+                item.name
+              )}</option>`
+          )
+          .join("")}</select></div>`,
+        textField("competitorName", "Competitor as written", record.competitorName),
+        `<div class="field"><label for="field-segment">Label</label><select id="field-segment" name="segment"><option value="">None</option>${SEGMENT_LABELS.map(
+          item => `<option ${item === record.segment ? "selected" : ""}>${esc(item)}</option>`
+        ).join("")}</select></div>`,
+        `<div class="field"><label for="field-confidence">Confidence</label><select id="field-confidence" name="confidence"><option value="">Not stated</option>${["High", "Medium", "Low"]
+          .map(item => `<option ${item === record.confidence ? "selected" : ""}>${item}</option>`)
+          .join("")}</select></div>`,
+        `<div class="field"><label for="field-basis">Evidence basis</label><select id="field-basis" name="basis"><option value="">Not stated</option>${EVIDENCE_BASES.map(
+          item => `<option ${item === record.basis ? "selected" : ""}>${esc(item)}</option>`
+        ).join("")}</select></div>`,
+        textareaField("rationale", "Why this competitor appears strongest", record.rationale),
+        textField("source", "Source file and locator, or experience basis", record.source),
+        textareaField("gap", "Missing or conflicting evidence / what could change the assessment", record.gap)
+      ].join("")
+    );
+  }
+  if (kind === "registerItems") {
+    const registerKind = REGISTER_KINDS[record.kind] ? record.kind : "ghost";
+    const meta = REGISTER_KINDS[registerKind];
+    const competitors = scoped("competitors");
+    const competitorSelect = `<div class="field"><label for="field-competitorId">Competitor</label><select id="field-competitorId" name="competitorId"><option value="">Any / not specific</option>${competitors
+      .map(
+        item =>
+          `<option value="${esc(item.id)}" ${item.id === record.competitorId ? "selected" : ""}>${esc(
+            item.name
+          )}</option>`
+      )
+      .join("")}</select></div>`;
+    return formShell(
+      kind,
+      record.id,
+      [
+        `<input type="hidden" name="kind" value="${esc(registerKind)}">`,
+        textField("title", meta.title, record.title, true),
+        registerKind === "price" ? workAreaField(record.workArea, "All work areas") : competitorSelect,
+        registerKind === "risk"
+          ? `<div class="field"><label for="field-level">Level</label><select id="field-level" name="level"><option value="">Not rated</option>${RISK_LEVELS.map(
+              item => `<option ${item === record.level ? "selected" : ""}>${item}</option>`
+            ).join("")}</select></div>`
+          : "",
+        registerKind === "risk" ? textField("owner", "Owner", record.owner) : "",
+        registerKind === "question"
+          ? selectField("status", "Status", REGISTER_STATUSES, record.status || "Open")
+          : "",
+        textareaField("detail", meta.detail, record.detail),
+        textareaField("response", meta.response, record.response)
       ].join("")
     );
   }
@@ -2010,6 +2510,23 @@ function recordForm(kind, record = {}) {
     );
   }
   return existing ? "" : "<p>Unsupported record type.</p>";
+}
+
+function workAreaField(selected = "", emptyLabel = "All work areas") {
+  const areas = pursuit()?.workAreas || [];
+  const listed = areas.some(item => workAreaKey(item) === workAreaKey(selected));
+  return `<div class="field"><label for="field-workArea">Work area</label><select id="field-workArea" name="workArea"><option value="">${esc(
+    emptyLabel
+  )}</option>${areas
+    .map(
+      item =>
+        `<option value="${esc(item)}" ${workAreaKey(item) === workAreaKey(selected) ? "selected" : ""}>${esc(item)}</option>`
+    )
+    .join("")}${
+    selected && !listed
+      ? `<option value="${esc(selected)}" selected>${esc(selected)} (not a listed work area)</option>`
+      : ""
+  }</select></div>`;
 }
 
 function formShell(kind, id, fields) {
@@ -2151,16 +2668,7 @@ function visualExportSections(run, { imageData = {} } = {}) {
     idPrefix: `export-${String(run.id || "report").replace(/[^a-z0-9_-]/gi, "-")}`,
     theme: "light"
   });
-  const order = [
-    "rankedCpi",
-    "scenarioRange",
-    "criterionDeltas",
-    "scoreHeatmap",
-    "evidenceGrid",
-    "evidenceRelationships",
-    "actionSummary"
-  ];
-  return order
+  return reportVisualOrder(run)
     .filter(name => specs?.[name])
     .map(name => {
       const spec = specs[name];
@@ -2307,7 +2815,9 @@ function duplicatePursuit(id) {
     criteria: new Map(),
     evidence: new Map(),
     competitors: new Map(),
-    actions: new Map()
+    actions: new Map(),
+    participantInputs: new Map(),
+    registerItems: new Map()
   };
   const copy = {
     ...structuredClone(source),
@@ -2316,12 +2826,13 @@ function duplicatePursuit(id) {
     archived: false
   };
   data.pursuits.push(copy);
-  for (const collection of ["criteria", "evidence", "competitors", "actions"]) {
+  const duplicated = Object.keys(idMaps);
+  for (const collection of duplicated) {
     for (const record of data[collection].filter(item => item.pursuitId === id)) {
       idMaps[collection].set(record.id, uid());
     }
   }
-  for (const collection of ["criteria", "evidence", "competitors", "actions"]) {
+  for (const collection of duplicated) {
     const sourceRecords = data[collection].filter(item => item.pursuitId === id);
     for (const record of sourceRecords) {
       const duplicate = structuredClone(record);
@@ -2336,6 +2847,9 @@ function duplicatePursuit(id) {
         duplicate.criterionIds = duplicate.criterionIds.map(
           criterionId => idMaps.criteria.get(criterionId) || criterionId
         );
+      }
+      if (["participantInputs", "registerItems"].includes(collection) && duplicate.competitorId) {
+        duplicate.competitorId = idMaps.competitors.get(duplicate.competitorId) || "";
       }
       if (collection === "competitors") {
         duplicate.evidenceIds = duplicate.evidenceIds.map(
@@ -2452,12 +2966,19 @@ async function handleRecordSubmit(form) {
   }
 
   if (kind !== "playbooks") record.pursuitId = data.active;
+  const workAreas = pursuit()?.workAreas || [];
   if (kind === "pursuits") {
     Object.assign(record, {
       status: existing.status || "Active",
       playbook: existing.playbook || data.playbooks[0]?.name || "",
+      workAreas: existing.workAreas || [],
+      showScenarioEstimate: existing.showScenarioEstimate === true,
+      exampleText: existing.exampleText || "",
       archived: false
     });
+  }
+  if (["criteria", "actions", "participantInputs"].includes(kind)) {
+    record.workArea = resolveWorkArea(record.workArea, workAreas);
   }
   if (kind === "criteria") {
     record.weight = Number(record.weight);
@@ -2470,6 +2991,7 @@ async function handleRecordSubmit(form) {
     }
   }
   if (kind === "evidence") {
+    record.classification = classificationForBasis(record.basis);
     record.citation = existing.citation || nextCitation();
     record.criterionIds = formData.getAll("criterionIds");
     for (const criterion of scoped("criteria")) {
@@ -2499,17 +3021,50 @@ async function handleRecordSubmit(form) {
     );
   }
   if (kind === "playbooks") record.builtIn = existing.builtIn || false;
+  if (kind === "participantInputs") {
+    const competitors = scoped("competitors");
+    const linked = competitors.find(item => item.id === record.competitorId);
+    record.rank = record.rank === "" ? "" : Number(record.rank);
+    record.competitorName = String(record.competitorName || "").trim() || linked?.name || "";
+    record.competitorId = linked
+      ? linked.id
+      : matchCompetitor(record.competitorName, competitors).competitor?.id || "";
+    if (!record.competitorName) {
+      data = previous;
+      alert("Choose a competitor or enter its name as written.");
+      return false;
+    }
+  }
+  if (kind === "registerItems") {
+    const meta = REGISTER_KINDS[record.kind] ? record.kind : "ghost";
+    record.kind = meta;
+    record.competitorId =
+      meta === "price" || !scoped("competitors").some(item => item.id === record.competitorId)
+        ? ""
+        : record.competitorId;
+    record.workArea = meta === "price" ? resolveWorkArea(record.workArea, workAreas) : "";
+    record.level = meta === "risk" ? record.level || "" : "";
+    record.owner = meta === "risk" ? record.owner || "" : "";
+    record.status = meta === "question" ? record.status || "Open" : existing.status || "Open";
+  }
 
   let persisted = false;
   let nextView = "";
   if (recordId) {
-    persisted = Boolean(updateRecord(kind, recordId, record));
+    const index = data[kind]?.findIndex(item => item.id === recordId) ?? -1;
+    if (index >= 0) {
+      data[kind][index] = { ...data[kind][index], ...record, id: data[kind][index].id };
+    }
+    // A new spelling on a competitor can resolve inputs that were imported unmatched.
+    if (index >= 0 && kind === "competitors") relinkParticipantInputs(data, data.active);
+    persisted = index >= 0 && save();
   } else {
     data[kind].push(record);
     if (kind === "pursuits") {
       data.active = record.id;
       nextView = "command";
     }
+    if (kind === "competitors") relinkParticipantInputs(data, data.active);
     persisted = save();
   }
   if (!persisted) {
@@ -2555,10 +3110,151 @@ function buildAndSaveReport(formData) {
   }
 }
 
+function guessCompetitorFromFileName(fileName) {
+  const words = String(fileName || "")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .split(/[^A-Za-z0-9&]+/)
+    .filter(Boolean);
+  const competitors = scoped("competitors");
+  for (let count = Math.min(3, words.length); count >= 1; count -= 1) {
+    const match = matchCompetitor(words.slice(0, count).join(" "), competitors);
+    if (match.competitor) return match.competitor.id;
+  }
+  return "";
+}
+
+async function previewSummaryImport(file) {
+  if (!pursuit()) {
+    toast("Open a pursuit before importing a summary.", "error");
+    return;
+  }
+  if (file.size > MAX_SUMMARY_BYTES) {
+    alert("The document is larger than the 5 MB limit.");
+    return;
+  }
+  let result;
+  try {
+    result = await readTaggedSummary(file, { sourceName: file.name.replace(/\.docx$/i, "") });
+  } catch (error) {
+    alert(`The summary was not imported:\n${error?.message || "The document could not be read."}`);
+    return;
+  }
+  if (!result.records.length) {
+    alert(
+      "No evidence tags were found. The importer reads tags written as [KNOWN · HIGH · locator], [ASSESSED · MEDIUM · locator], [CLAIMED · locator], or [UNKNOWN · note]."
+    );
+    return;
+  }
+  pendingSummaryImport = { fileName: file.name, result, baseline: data, pursuitId: data.active };
+  const guess = guessCompetitorFromFileName(file.name);
+  const basisCounts = Object.entries(result.counts.byBasis)
+    .map(([basis, count]) => `${basis} ${count}`)
+    .join(" · ");
+  modal(
+    "Import tagged summary",
+    `<form class="form-grid" data-form="summary-import">
+      <p class="field full">${esc(file.name)}: ${result.counts.tags} tags on ${result.counts.claims} claims, giving ${
+        result.records.length
+      } evidence records (${esc(basisCounts)}).${
+        result.truncated ? " The document has more tags than the 1,000-record limit; the rest were left out." : ""
+      }</p>
+      ${textField("sourceName", "Source name for every record", file.name.replace(/\.docx$/i, ""), true)}
+      <div class="field"><label for="field-summaryCompetitor">Link records to competitor</label><select id="field-summaryCompetitor" name="competitorId"><option value="">Do not link</option>${scoped(
+        "competitors"
+      )
+        .map(
+          item =>
+            `<option value="${esc(item.id)}" ${item.id === guess ? "selected" : ""}>${esc(item.name)}</option>`
+        )
+        .join("")}</select></div>
+      <div class="field full table-wrap"><table><caption>First ${Math.min(
+        25,
+        result.records.length
+      )} of ${result.records.length} records</caption><thead><tr><th scope="col">Basis</th><th scope="col">Confidence</th><th scope="col">Claim</th><th scope="col">Locator</th></tr></thead><tbody>${result.records
+        .slice(0, 25)
+        .map(
+          item =>
+            `<tr><td>${esc(item.basis)}</td><td>${esc(item.confidence)}</td><td>${esc(item.title)}</td><td>${esc(
+              item.locator
+            )}</td></tr>`
+        )
+        .join("")}</tbody></table></div>
+      <p class="field full muted">Records that match an existing title, source, locator, and basis are skipped. A recovery snapshot is created first. Tags are the summary author's labels; the importer does not verify them.</p>
+      <div class="field full form-actions"><button class="btn primary" type="button" data-summary-commit>Add ${
+        result.records.length
+      } evidence records</button><button class="btn" type="button" data-close>Cancel</button></div>
+    </form>`
+  );
+}
+
+function commitSummaryImport(form) {
+  const pending = pendingSummaryImport;
+  if (!pending || !form) return;
+  if (staleWorkspace || pending.baseline !== data || pending.pursuitId !== data.active) {
+    pendingSummaryImport = null;
+    document.querySelector("#modal").close();
+    toast("The workspace changed after the summary was read. Import the file again.", "error");
+    return;
+  }
+  const formData = new FormData(form);
+  const source = String(formData.get("sourceName") || "").trim().slice(0, 180) || pending.fileName;
+  const competitor = scoped("competitors").find(item => item.id === formData.get("competitorId"));
+  const key = item =>
+    [item.title, item.source, item.locator || "", item.basis || ""]
+      .map(value => String(value).trim().toLowerCase())
+      .join("\u0000");
+  const existing = new Set(scoped("evidence").map(key));
+  const previous = structuredClone(data);
+  pushSnapshot(`Before importing ${pending.fileName}`);
+  let added = 0;
+  let skipped = 0;
+  for (const record of pending.result.records) {
+    const evidence = {
+      ...record,
+      id: uid(),
+      pursuitId: data.active,
+      source,
+      citation: nextCitation(),
+      url: "",
+      publishedAt: "",
+      criterionIds: [],
+      attachmentName: "",
+      attachmentType: "",
+      attachmentData: ""
+    };
+    if (existing.has(key(evidence))) {
+      skipped += 1;
+      continue;
+    }
+    existing.add(key(evidence));
+    data.evidence.push(evidence);
+    if (competitor) competitor.evidenceIds.push(evidence.id);
+    added += 1;
+  }
+  pendingSummaryImport = null;
+  const validation = validateWorkspace(data);
+  if (!validation.valid) {
+    data = previous;
+    toast(`The summary was not imported: ${validation.errors[0]}`, "error");
+    return;
+  }
+  if (!save()) {
+    data = previous;
+    render();
+    return;
+  }
+  dirtyForm = false;
+  document.querySelector("#modal").close();
+  navigateTo("evidence");
+  toast(
+    `${added} evidence record${added === 1 ? "" : "s"} added${skipped ? `, ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : ""}`
+  );
+}
+
 function deleteRecord(kind, id) {
   const record = data[kind]?.find(item => item.id === id);
   if (!record) return;
-  if (!confirm(`Delete this ${kind.replace(/s$/, "")}? A recovery snapshot will be created first.`)) {
+  if (!confirm(`Delete this ${singular(kind) || "record"}? A recovery snapshot will be created first.`)) {
     return;
   }
   pushSnapshot(`Before deleting ${kind} record`);
@@ -2568,6 +3264,11 @@ function deleteRecord(kind, id) {
       evidence.criterionIds = evidence.criterionIds.filter(item => item !== id);
     }
     for (const competitor of data.competitors) delete competitor.scores[id];
+  }
+  if (kind === "competitors") {
+    for (const item of [...data.participantInputs, ...data.registerItems]) {
+      if (item.competitorId === id) item.competitorId = "";
+    }
   }
   if (kind === "evidence") {
     for (const criterion of data.criteria) {
@@ -2585,9 +3286,13 @@ function deleteRecord(kind, id) {
   }
 }
 
-function openRecord(kind, id = "") {
-  const record = id ? data[kind].find(item => item.id === id) : {};
-  modal(`${id ? "Edit" : "Add"} ${singular(kind)}`, recordForm(kind, record || {}));
+function openRecord(kind, id = "", defaults = {}) {
+  const record = id ? data[kind].find(item => item.id === id) : defaults;
+  const label =
+    kind === "registerItems"
+      ? REGISTER_KINDS[record?.kind]?.singular || "register entry"
+      : singular(kind);
+  modal(`${id ? "Edit" : "Add"} ${label}`, recordForm(kind, record || {}));
 }
 
 document.addEventListener("click", async event => {
@@ -2676,6 +3381,20 @@ document.addEventListener("click", async event => {
   }
   if (button.dataset.restorePursuit) restorePursuit(button.dataset.restorePursuit);
   if (button.dataset.add) openRecord(button.dataset.add);
+  if (button.dataset.addRegister) openRecord("registerItems", "", { kind: button.dataset.addRegister });
+  if (button.dataset.action === "relink-inputs") {
+    const linked = relinkParticipantInputs(data, data.active);
+    if (!linked) {
+      toast("No unmatched names match a competitor or alias yet.");
+    } else if (save()) {
+      render();
+      toast(`${linked} input${linked === 1 ? "" : "s"} matched to competitors`);
+    } else {
+      render();
+    }
+  }
+  if (button.dataset.action === "summary-import") document.querySelector("#summaryImportFile")?.click();
+  if (button.dataset.summaryCommit !== undefined) commitSummaryImport(button.closest("form"));
   if (button.dataset.edit) {
     const [kind, id] = button.dataset.edit.split(":");
     openRecord(kind, id);
@@ -2947,6 +3666,12 @@ document.addEventListener("change", event => {
   if (event.target.id === "importFile" && event.target.files[0]) {
     importWorkspaceFile(event.target.files[0]);
   }
+  if (event.target.id === "summaryImportFile" && event.target.files[0]) {
+    const file = event.target.files[0];
+    event.target.value = "";
+    previewSummaryImport(file);
+    return;
+  }
   if (event.target.closest("form[data-form]") && !event.target.dataset.filterOptions) markDirty();
 });
 
@@ -2955,7 +3680,11 @@ document.addEventListener("submit", async event => {
   const form = event.target;
   const type = form.dataset.form;
   if (type === "opportunity") {
-    if (updateRecord("pursuits", data.active, Object.fromEntries(new FormData(form)))) {
+    const formData = new FormData(form);
+    const values = Object.fromEntries(formData);
+    values.workAreas = parseWorkAreas(values.workAreas);
+    values.showScenarioEstimate = formData.has("showScenarioEstimate");
+    if (updateRecord("pursuits", data.active, values)) {
       dirtyForm = false;
       render();
       toast("Opportunity saved");
@@ -2964,6 +3693,7 @@ document.addEventListener("submit", async event => {
     }
   }
   if (type === "run") buildAndSaveReport(new FormData(form));
+  if (type === "summary-import") commitSummaryImport(form);
   if (type === "record") {
     try {
       await handleRecordSubmit(form);
@@ -3314,6 +4044,20 @@ function visualDataTable(spec) {
   return `<p class="muted">A data table is not available for this visualization.</p>`;
 }
 
+// A report generated with the scenario estimate off keeps the estimate in its snapshot
+// (the snapshot's metrics are validated against it) but never displays it.
+function reportVisualOrder(run) {
+  return [
+    "rankedCpi",
+    "scenarioRange",
+    "criterionDeltas",
+    "scoreHeatmap",
+    "evidenceGrid",
+    "evidenceRelationships",
+    "actionSummary"
+  ].filter(name => name !== "scenarioRange" || run?.showScenarioEstimate !== false);
+}
+
 function reportVisualSpecs(run) {
   const visuals = run?.visualSnapshot?.visuals;
   return visuals && typeof visuals === "object" && !Array.isArray(visuals) ? visuals : null;
@@ -3326,16 +4070,7 @@ function reportVisualMarkup(run, prefix = "report") {
       LEGACY_VISUAL_NOTICE
     )}</p>`;
   }
-  const order = [
-    "rankedCpi",
-    "scenarioRange",
-    "criterionDeltas",
-    "scoreHeatmap",
-    "evidenceGrid",
-    "evidenceRelationships",
-    "actionSummary"
-  ];
-  return `<div class="visualization-grid visual-grid report-visuals">${order
+  return `<div class="visualization-grid visual-grid report-visuals">${reportVisualOrder(run)
     .filter(name => specs?.[name])
     .map((name, index) =>
       chartPanel(specs[name], {
@@ -3470,8 +4205,20 @@ function singular(kind) {
     evidence: "evidence",
     competitors: "competitor",
     actions: "action",
-    playbooks: "playbook"
+    playbooks: "playbook",
+    participantInputs: "participant input",
+    registerItems: "register entry"
   }[kind];
+}
+
+function basisTag(value) {
+  const style =
+    value === "Documented fact"
+      ? "good"
+      : ["Claimed", "Personal experience", "Unknown"].includes(value)
+        ? "warn"
+        : "";
+  return `<span class="tag ${style}">${esc(value || "Basis not stated")}</span>`;
 }
 
 function reportFilename(run) {

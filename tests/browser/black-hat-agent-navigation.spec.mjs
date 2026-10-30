@@ -8,6 +8,8 @@ const NAVIGATION_LABELS = [
   "Evaluation Criteria",
   "Evidence Room",
   "Competitors",
+  "Participant Inputs",
+  "Black Hat Registers",
   "Data Import",
   "Playbook Library",
   "Black Hat Session",
@@ -58,7 +60,7 @@ test("the in-app User Guide explains the workflow and links into the workspace",
   const navigation = page.getByRole("navigation", { name: "Workspace navigation" });
   await navigation.getByRole("link", { name: "User Guide", exact: true }).click();
   await expect(page.getByRole("heading", { name: "How to use Black Hat Agent" })).toBeVisible();
-  await expect(page.locator(".guide-steps > li")).toHaveCount(8);
+  await expect(page.locator(".guide-steps > li")).toHaveCount(10);
   await expect(page.getByText("Build an evidence-ready workspace", { exact: true })).toBeVisible();
   await expect(page.getByText("Protect the work stored in this browser", { exact: true })).toBeVisible();
 

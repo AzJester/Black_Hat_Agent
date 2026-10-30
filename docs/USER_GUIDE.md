@@ -9,18 +9,22 @@ version of the recommended workflow with direct links to each workspace area.
 2. Select **Create pursuit**, or select **Load demonstration workspace** to explore
    the workflow with sample records first.
 3. Optionally use **Data Import** to map an Excel or CSV table into the workspace.
-4. Complete the opportunity profile, customer priorities, and evaluation criteria.
-5. Add customer, competitor, and market artifacts in **Evidence Room**.
+4. Complete the opportunity profile, list its work areas, and add evaluation
+   criteria, assigning each to a work area or leaving it cross-cutting.
+5. Add customer, competitor, and market artifacts in **Evidence Room**, or import a
+   tagged competitor summary (.docx).
 6. Create competitor profiles and score your team and the competitors against the
    customer criteria.
-7. Select a built-in facilitation lens or create a custom playbook.
-8. Record the facilitator, participants, session question, and working notes.
-9. Run the Black Hat session to generate a deterministic competitive-analysis
-   report.
-10. Review the evidence citations, edit the report, and save a report version.
-11. Download the approved report as Markdown, standalone visual HTML, or a
+7. Record or import each participant's ranked competitors per work area in
+   **Participant Inputs**, and fill the **Black Hat Registers**.
+8. Select a built-in facilitation lens or create a custom playbook.
+9. Record the facilitator, participants, session question, and working notes.
+10. Run the Black Hat session to generate a deterministic competitive-analysis
+    report.
+11. Review the evidence citations, edit the report, and save a report version.
+12. Download the approved report as Markdown, standalone visual HTML, or a
     Word-compatible `.doc`, or use the print-ready view to save a PDF.
-12. Use **Export workspace** to make a portable JSON backup.
+13. Use **Export workspace** to make a portable JSON backup.
 
 ## 1. Frame the pursuit
 
@@ -38,11 +42,46 @@ criterion a weight or relative importance. Keep priorities and criteria distinct
 Weights and scores are team judgments unless supported by a cited customer artifact.
 Document the basis for any consequential assumption.
 
+List the pursuit's **work areas** in Opportunity, one per line: the order types or
+service lines the customer buys separately, such as C-UAS as a Service, System
+Integration, and RDT&E Support. Competitors are compared within each work area, not
+as one ranked field, because the strongest competitor usually differs by order type.
+Assign each criterion to a work area, or leave it cross-cutting (for example, a
+staffing factor that applies to every order).
+
+Optionally paste the participant worksheet's example response into **Worksheet
+example response**. Participant inputs that repeat it are flagged.
+
 ## 2. Build the evidence base
 
 In **Evidence Room**, create one record for each useful artifact or observation.
-Include a recognizable source name or URL, evidence type, confidence, and a concise
-note explaining what the source supports.
+Include a recognizable source name or URL, a locator (page, section, or record ID),
+evidence type, confidence, and a concise note explaining what the source supports.
+
+Every record has an **evidence basis**, kept separate from confidence:
+
+- **Documented fact**: a traceable source record.
+- **Summary-stated**: a summary's claim whose underlying record was not checked.
+- **Claimed**: the competitor's own assertion.
+- **Inference**: the team's judgment from other evidence.
+- **Personal experience**: one person's first-hand knowledge.
+- **Unknown**: searched and not found.
+
+A criterion classified Confirmed is scored as Inference when every linked source is a
+claim, personal experience, or unknown.
+
+### Import a tagged competitor summary
+
+**Import tagged summary (.docx)** reads a competitor summary written with inline tags
+such as `[KNOWN · HIGH · AND G17]`, `[ASSESSED · MEDIUM · Supp T2.5]`,
+`[CLAIMED · AND C20]`, or `[UNKNOWN · searched FPDS · AND G08]`. Each tagged claim
+becomes an evidence record: KNOWN maps to documented fact, ASSESSED to inference,
+CLAIMED to claimed, and UNKNOWN to unknown. The table row label and section heading
+go into the title and locator. A preview shows the counts and first records, and the
+competitor named in the file name is preselected for linking. Records that match an
+existing title, source, locator, and basis are skipped, and a recovery snapshot is
+created first. The tags are the summary author's labels; the importer does not
+verify them.
 
 Each evidence record receives a stable citation label. Generated reports use those
 labels so a reviewer can trace a statement back to the local record. A citation does
@@ -50,8 +89,8 @@ not verify the source; the team must still confirm its accuracy and permitted us
 
 An evidence record can include an HTTPS source URL and one optional local attachment
 up to 300 KB. Text, Markdown, CSV, and JSON attachments can populate an empty note
-with a bounded excerpt; PDF and Word files are retained as attachments but are not
-parsed. Attachments consume limited browser storage and are included in JSON workspace
+with a bounded excerpt; PDF and Word attachments are retained but not parsed (the
+separate summary importer below reads Word files it is given). Attachments consume limited browser storage and are included in JSON workspace
 exports.
 
 Prefer separate records when one document supports unrelated claims. Mark indirect
@@ -61,7 +100,10 @@ facts.
 ## 3. Profile and score competitors
 
 In **Competitors**, record each plausible competitor's position, likely strategy,
-strengths, weaknesses, and rationale. Include your team's own position in the
+strengths, weaknesses, rationale, vehicle position, most likely play, most dangerous
+play, and team hypothesis (with its likelihood and source). Record other spellings of
+the name, including misspellings and abbreviations, as **aliases** so participant
+inputs match the right record. Include your team's own position in the
 criterion-level comparison so the scorecard shows relative gaps.
 
 Score each organization against the active pursuit's evaluation criteria using the
@@ -69,17 +111,24 @@ same scale. Use notes or rationale to explain important scores and connect them 
 evidence where possible. The application summarizes the entered scores and weights;
 it does not independently decide that one competitor is better.
 
-The command center also shows a confidence-adjusted Competitive Position Index and,
-when both criteria and competitors are scored, a scenario estimate with a broad
-uncertainty range. The estimate is a planning aid based on entered scores, coverage,
-confidence, and critical-gate gaps. It is explicitly not a statistical forecast.
+The Command Center leads with a **work-area view**: for each work area, the score
+leader (ties are shown as ties), our index, the participants' top picks, and the
+number of disagreements. Each work-area index uses that area's criteria plus the
+cross-cutting criteria, so indexes are comparable within a work area but not across
+work areas. The overall Competitive Position Index combines every work area and is
+shown second.
+
+The scenario win estimate is **off by default**. Turn it on per pursuit in
+Opportunity only if the team wants it. It is a planning aid based on entered scores,
+coverage, confidence, and critical-gate gaps, not a statistical forecast, and a
+single number tends to replace the work-area comparison in discussion.
 
 Use the visual panels to compare:
 
 - ranked CPI, coverage, and confidence across your team and competitors;
 - team and competitor scores for each criterion;
 - the strongest positive and negative criterion gaps;
-- the scenario estimate, prior estimate, and uncertainty range;
+- the scenario estimate, prior estimate, and uncertainty range, when enabled;
 - linked evidence, support/challenge conflicts, and evidence-to-criterion
   traceability;
 - saved-run trends and the action-register mix.
@@ -96,7 +145,52 @@ Before accepting a scorecard:
 - test whether the customer's likely weighting differs from the team's weighting;
 - record an action for information that could materially change the result.
 
-## 4. Prepare a session
+## 4. Collect participant inputs
+
+In **Participant Inputs**, record each participant's strongest competitors for the
+work area they know best: rank, competitor, label (Heavyweight / volume threat,
+Incumbent / legacy threat, or Wildcard / niche or agile threat), confidence, evidence
+basis, why, source, and what would change the assessment.
+
+To import a session workbook, use **Data Import** with the **Participant inputs**
+destination. Blank participant and work-area cells repeat the row above, rows with
+no rank column are ranked in sheet order within each participant and work area, and
+labels such as "Heavyweight/Volume Threat" are normalized. Competitor names are
+matched by name, alias, or a unique leading word ("Anduril Industries" matches
+Anduril). Unmatched names are imported unlinked and flagged; add the spelling as an
+alias, then select **Match names again**.
+
+Each work area shows a roll-up (ordered by first picks, then reciprocal-rank points,
+then mentions) and lists every disagreement: different first picks, a competitor
+ranked #1 by one person and #3 or lower by another, a High/Low confidence split, or
+different labels for the same competitor. Resolve disagreements in the room rather
+than averaging them.
+
+**Input quality checks** flag High confidence resting on personal experience or no
+stated basis with no source, documented-fact or summary inputs with no source, an
+Incumbent label on a competitor not marked as an incumbent, text copied from the
+worksheet example or another participant, one person giving the same competitor two
+confidence levels, duplicate ranks, unlisted work areas, unmatched names, session
+participants with no input, and open actions without an owner, due date, or evidence
+path.
+
+## 5. Fill the Black Hat registers
+
+**Black Hat Registers** holds four registers, each of which becomes a report section:
+
+- **Ghosting bank**: the competitor claim, the evidence an evaluator should demand,
+  and our counter.
+- **Questions for the room**: the question, who can answer it, its status, and the
+  current answer.
+- **Risk register**: risk, level, category, mitigation, and owner.
+- **Price posture**: cost drivers, the cost or price risk hypothesis, and our response
+  for each work area.
+
+In **Action Register**, give each action a work area and an **evidence path** (what
+will show the issue is closed). Close the session only when each material issue has
+an owner, a due date, and an evidence path.
+
+## 6. Prepare a session
 
 Choose a built-in playbook in **Playbook Library**, or create a custom playbook for a
 specific review lens. Custom playbooks should use focused prompts that can be answered
@@ -113,18 +207,22 @@ In **Black Hat Session**, record:
 Participant names and notes are stored locally and may appear in workspace exports,
 so follow the data-handling guidance for the site.
 
-## 5. Generate and review the competitive analysis
+## 7. Generate and review the competitive analysis
 
 Generate the report after the priorities, criteria, evidence, and competitor
 scorecards are ready. The application deterministically assembles:
 
-- executive and opportunity summaries;
+- executive and opportunity summaries, led by the work-area comparison;
 - customer priorities and weighted evaluation criteria;
+- the work-area comparison, participant assessments and disagreements, and the
+  work-area roll-up;
 - comparative scores;
 - competitor-by-competitor posture and likely strategy;
 - strengths, weaknesses, vulnerabilities, and challenge themes;
 - counter-positioning and win-theme prompts;
-- existing and recommended actions;
+- the ghosting bank, price posture, risk register, and questions for the room;
+- input quality checks;
+- existing and recommended actions, with evidence paths;
 - unsupported assumptions, confidence warnings, and missing information;
 - evidence citations and a verification guardrail.
 
@@ -132,7 +230,7 @@ The generator uses no AI model and performs no web research. It reorganizes and
 compares only the information entered in the workspace. Treat the first draft as a
 facilitation product that requires human review.
 
-## 6. Edit, version, and restore reports
+## 8. Edit, version, and restore reports
 
 Open a generated report in **Output Center** or **Run History**. Edit inaccurate
 wording, add session judgment, or remove a claim that the evidence does not support.
@@ -145,7 +243,7 @@ retained.
 Regenerating a report uses the latest workspace records. It does not silently update
 an older report version, which preserves the review trail.
 
-## 7. Export a report
+## 9. Export a report
 
 The output center provides four report formats:
 
@@ -171,7 +269,7 @@ workspace visuals.
 Review the downloaded file before distribution. A report export is not a complete
 workspace backup and may omit source-detail, snapshot, or version-history records.
 
-## 8. Manage pursuits and recovery
+## 10. Manage pursuits and recovery
 
 Archive a pursuit to remove it from the active portfolio without deleting its
 records. Use the archived-pursuit view to restore it. Restoring makes the pursuit
@@ -182,7 +280,7 @@ recovery. Use the recovery controls to inspect and restore a recent snapshot aft
 an accidental edit, reset, or import. Because snapshots and the working copy share
 the same browser storage, both disappear if the site's storage is cleared.
 
-## 9. Import Excel or CSV
+## 11. Import Excel or CSV
 
 Use **Data Import** to add or update structured records from a local `.xlsx`, `.xls`,
 or `.csv` file. The file must be no larger than 5 MB. A single import can contain at

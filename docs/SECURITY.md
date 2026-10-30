@@ -14,6 +14,12 @@ UTF-8 and parsed as inert text. The application does not upload the selected fil
 send its contents to an API. The original workbook is not retained after import;
 only mapped values are committed to `localStorage` and later workspace exports.
 
+A tagged competitor summary (.docx) selected in Evidence Room is read on the device:
+only `word/document.xml` is decompressed, with a 5 MB file limit and a 20 MB
+decompressed limit enforced while inflating; encrypted and ZIP64 files are refused.
+Text is extracted by a tokenizer and stored as inert strings. The file is not kept,
+uploaded, or rendered.
+
 Optional evidence attachments are encoded into the same browser storage and limited
 to 300 KB per file. They are not uploaded by the application, but they are included
 in workspace JSON exports and can materially increase storage and export size.
