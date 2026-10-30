@@ -152,6 +152,30 @@ work area they know best: rank, competitor, label (Heavyweight / volume threat,
 Incumbent / legacy threat, or Wildcard / niche or agile threat), confidence, evidence
 basis, why, source, and what would change the assessment.
 
+### Session workbook layout
+
+A session workbook imports cleanly when its assessment sheet has one header row and
+one row per pick, with these columns (the header wording below maps automatically):
+
+| Column | What goes in it |
+| --- | --- |
+| Participant | Full name. Leave it blank on a participant's later rows. |
+| Work Area | One of the pursuit's work areas. Blank repeats the row above. |
+| Rank | Optional. Without it, row order within a participant's work area is the rank. |
+| Strongest Competitor | Any recognizable spelling; aliases resolve misspellings. |
+| Rating | Heavyweight, Incumbent, or Wildcard label. |
+| Confidence | High, Medium, or Low. |
+| Evidence and Justification | Why this competitor appears strongest. |
+| Evidence Basis | Documented fact, Summary-stated, Claimed, Inference, Personal experience, or Unknown. |
+| Source | File name and page or section, or the basis of the personal experience. |
+| Gap or What Changes Our View | The evidence that would change the assessment. |
+
+Evidence Basis and Source matter most. Without them, every High-confidence pick is
+flagged as unsourced, and nothing separates a documented record from one person's
+recollection. Give Evidence Basis a dropdown so the six values are spelled
+consistently. Use full participant names: "Chris" matches "Christopher Leslie", but
+a nickname that is not a prefix, such as "Dave" for "David", does not.
+
 To import a session workbook, use **Data Import** with the **Participant inputs**
 destination. Blank participant and work-area cells repeat the row above, rows with
 no rank column are ranked in sheet order within each participant and work area, and
@@ -199,7 +223,9 @@ or discriminator credibility.
 
 In **Black Hat Session**, record:
 
-- the facilitator and participants;
+- the facilitator and participants (the field starts with everyone who has a
+  participant input; add anyone who has not submitted one, and the report flags
+  each missing input);
 - the central question;
 - working notes and dissenting views;
 - the playbook to apply.
@@ -293,11 +319,13 @@ The wizard can target:
 - evaluation criteria;
 - evidence;
 - competitors;
-- competitor scores; or
-- actions.
+- competitor scores;
+- actions; or
+- participant inputs (see **Collect participant inputs** for the session workbook
+  layout).
 
-For criteria, evidence, competitors, competitor scores, and actions, first select the
-pursuit that should receive the records. Replace operations affect only the active
+For every destination except pursuits, first select the pursuit that should receive
+the records. Replace operations affect only the active
 pursuit.
 
 ### Import steps
@@ -377,7 +405,11 @@ windows may discard all local data when closed.
 - Give every consequential claim a recognizable source and confidence level.
 - Record why a score was assigned, not only the number.
 - Separate confirmed evidence, reasonable inference, conflicting evidence,
-  unsupported hypothesis, and missing information.
+  unsupported hypothesis, and missing information, and record each source's
+  evidence basis.
+- Compare competitors within a work area before looking at any overall index.
+- Resolve participant disagreements and quality warnings in the room; do not
+  average them away.
 - Ask session participants to challenge customer weights and internal bias.
 - Assign owners and dates to validation gaps.
 - Save a report version before material editing.
