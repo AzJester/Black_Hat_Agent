@@ -13,8 +13,17 @@ evidence-cited scorecards, challenge themes, actions, and versioned reports.
 - session participants, facilitator context, and working notes
 - evidence records with source details, confidence, and stable report citations
 - optional small local evidence attachments and source URLs
-- competitor profiles, strengths, weaknesses, likely strategies, and
-  criterion-by-criterion scoring
+- competitor profiles, strengths, weaknesses, likely strategies, most likely and
+  most dangerous plays, team hypotheses, aliases, and criterion-by-criterion scoring
+- work areas (order types): competitors are compared within each work area before
+  any overall index, and the scenario win estimate is off unless a pursuit enables it
+- participant inputs per work area with a roll-up and an explicit list of
+  disagreements, imported from a session workbook or entered directly
+- evidence basis (documented fact, summary-stated, claimed, inference, personal
+  experience, unknown) separate from confidence, with locators
+- import of tagged competitor summaries (.docx) as evidence records
+- deterministic input-quality checks, a ghosting bank, questions for the room, a
+  risk register, and price posture by work area
 - built-in and user-created Black Hat playbooks
 - deterministic, evidence-grounded competitive-analysis generation
 - confidence-adjusted CPI, comparative margin, and a clearly labeled scenario estimate
@@ -63,7 +72,7 @@ The browser-only import wizard accepts `.xlsx`, `.xls`, and `.csv` files up to 5
 Each import is limited to 2,000 data rows, 100 columns, 100,000 total cells, and
 10,000 characters in any one cell.
 It can import pursuits, evaluation criteria, evidence, competitors, competitor
-scores, and actions. Choose a worksheet and header row, accept or adjust the
+scores, actions, and participant inputs. Choose a worksheet and header row, accept or adjust the
 suggested column mapping, and review the preview and diagnostics before committing.
 
 Three import modes are available where supported:

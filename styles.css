@@ -328,3 +328,12 @@ caption{caption-side:top;padding:0 0 8px;text-align:left;font-weight:700;color:v
   .chart-data[open]>*{display:block}
   a{color:inherit;text-decoration:none}
 }
+/* Participant inputs, registers, and input-quality checks */
+.tag.warn{border-color:var(--gunmetal);background:var(--white);color:var(--ink)}
+.participant-area h3{font-size:13px;margin:0 0 8px}
+.rollup-list{margin:0 0 16px;padding-left:20px}.rollup-list li{padding:4px 0}
+.disagreement-list,.quality-list{margin:0 0 12px;padding-left:20px}.disagreement-list li,.quality-list li{padding:5px 0;border-bottom:1px solid var(--line)}
+.quality-list li.warn{font-weight:600}
+.register-panel .report-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.checkbox-field small,.field small{display:block;margin-top:4px;color:var(--muted)}
+.participant-area td .btn,.register-panel td .btn{white-space:nowrap}

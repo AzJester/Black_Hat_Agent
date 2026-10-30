@@ -9,7 +9,7 @@ const APP = "./";
 const STORAGE_KEY = "black_hat_agent_public_v2";
 const VIEWS = [
   "portfolio", "command", "opportunity", "criteria", "evidence", "competitors",
-  "imports", "playbooks", "session", "history", "outputs", "actions", "recovery", "guide"
+  "participants", "registers", "imports", "playbooks", "session", "history", "outputs", "actions", "recovery", "guide"
 ];
 const PAYLOAD =
   '<img src=x onerror="window.__xss&&window.__xss(\'img\')">' +
@@ -55,7 +55,8 @@ test("hostile workspace text renders as escaped data in every view and a generat
   const injected = await page.evaluate(({ key, payload }) => {
     const data = JSON.parse(localStorage.getItem(key));
     const protectedKeys = new Set([
-      "id", "createdAt", "updatedAt", "stage", "status", "confidence", "stance", "type", "posture", "priority"
+      "id", "createdAt", "updatedAt", "stage", "status", "confidence", "stance", "type", "posture", "priority",
+      "basis", "segment", "kind", "teamLikelihood"
     ]);
     let count = 0;
     const walk = value => {

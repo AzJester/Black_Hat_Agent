@@ -22,8 +22,9 @@ test("mobile navigation, URL history, and responsive visuals work together", asy
   await expect(page).toHaveURL(/#command$/);
   await expect(page.locator("#workspace-sidebar")).not.toHaveClass(/\bopen\b/);
   await expect(page.getByRole("heading", { name: "Joint Multi-Domain T&E Support" })).toBeVisible();
-  await expect(page.locator(".chart-card")).toHaveCount(3);
-  await expect(page.locator(".chart-card svg[role='img']")).toHaveCount(3);
+  // The demonstration pursuit leaves the scenario estimate off, so its chart is hidden.
+  await expect(page.locator(".chart-card")).toHaveCount(2);
+  await expect(page.locator(".chart-card svg[role='img']")).toHaveCount(2);
 
   const overflow = await page.evaluate(
     () => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth
@@ -63,8 +64,8 @@ test("forms protect unsaved work and reports export their saved visuals", async 
     .click();
   await page.getByRole("button", { name: "Generate competitive analysis" }).click();
   await expect(page.getByRole("heading", { name: "Editable competitive-analysis reports" })).toBeVisible();
-  await expect(page.locator(".report-card .chart-card")).toHaveCount(7);
-  await expect(page.locator(".report-card .chart-card table")).toHaveCount(7);
+  await expect(page.locator(".report-card .chart-card")).toHaveCount(6);
+  await expect(page.locator(".report-card .chart-card table")).toHaveCount(6);
 
   const [visualDownload] = await Promise.all([
     page.waitForEvent("download"),

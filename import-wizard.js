@@ -843,8 +843,17 @@ function previewMarkup(preview, processedRows) {
 function previewDetails(item) {
   if (item.score !== undefined) return `Score ${item.score}/5`;
   if (!item.record) return item.id || "Existing record";
+  if (item.record.participant !== undefined) {
+    const linked = item.record.competitorId ? "matched to a competitor" : "not matched to a competitor";
+    return `Rank ${item.record.rank || "?"} · ${item.record.segment || "no label"} · ${
+      item.record.confidence || "no confidence"
+    } · ${linked}`;
+  }
   const fields = Object.entries(item.record)
-    .filter(([key, value]) => !["id", "pursuitId", "attachmentData"].includes(key) && value !== "")
+    .filter(
+      ([key, value]) =>
+        !["id", "pursuitId", "competitorId", "attachmentData"].includes(key) && value !== ""
+    )
     .slice(0, 3)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`);
   return fields.join(" · ");

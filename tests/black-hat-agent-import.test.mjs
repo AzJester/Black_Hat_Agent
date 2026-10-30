@@ -202,7 +202,8 @@ test("target metadata and header suggestions cover every supported destination",
     "evidence",
     "competitors",
     "competitorScores",
-    "actions"
+    "actions",
+    "participantInputs"
   ]);
   assert.equal(normalizeHeader(" Our_Score (%) "), "our score");
   const suggestion = suggestColumnMapping("criteria", [

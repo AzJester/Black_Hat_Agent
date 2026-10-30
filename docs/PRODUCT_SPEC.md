@@ -25,8 +25,9 @@ deliverables without a backend or AI service.
 
 ## Primary user journey
 
-Portfolio -> opportunity framing -> customer priorities and criteria -> evidence
-collection -> competitor hypotheses and scoring -> playbook selection -> facilitated
+Portfolio -> opportunity framing and work areas -> customer priorities and criteria
+-> evidence collection (including tagged summaries) -> competitor hypotheses and
+scoring -> participant inputs and registers -> playbook selection -> facilitated
 session -> deterministic report -> editing and review -> owned actions -> versioned
 and portable output.
 
@@ -63,6 +64,24 @@ and portable output.
 Scores are team-entered judgments, not independently calculated market facts. Any
 derived total or ranking is a deterministic summary of those inputs.
 
+### Work areas and participant inputs
+
+- Pursuit work areas (order types or service lines); criteria, participant inputs,
+  actions, and price posture are assigned to a work area or left cross-cutting.
+- Competitors are compared within each work area first. The overall CPI is shown
+  second, and the scenario win estimate is off unless the pursuit enables it.
+- Participant inputs record rank, competitor, label, confidence, evidence basis,
+  rationale, source, and what would change the view, per participant and work area.
+- A roll-up per work area and an explicit list of disagreements, not an average.
+- Competitor aliases; names are matched by name, alias, or unique leading word, and
+  unmatched names stay visible until resolved.
+- Evidence basis kept separate from confidence, with a locator field.
+- Deterministic input-quality checks (unsourced high confidence, label misuse,
+  copied text, self-contradiction, missing participants, open actions without an
+  owner, due date, or evidence path).
+- Ghosting bank, questions for the room, risk register, and price posture registers.
+- Import of tagged competitor summaries (.docx) as evidence records.
+
 ### Local Excel and CSV import
 
 - Accept `.xlsx`, `.xls`, and `.csv` files up to 5 MB.
@@ -75,7 +94,9 @@ derived total or ranking is a deterministic summary of those inputs.
   import mode. Reject hidden/very hidden worksheets and hidden rows or columns in
   the selected imported range.
 - Support pursuits, evaluation criteria, evidence, competitors, competitor scores,
-  and actions as destinations.
+  actions, and participant inputs as destinations. Participant inputs repeat blank
+  participant and work-area cells from the row above and rank rows in sheet order
+  when no rank column is mapped.
 - Suggest column mappings from headers while allowing every mapping to be reviewed
   and changed manually.
 - Preview up to 100 creates, updates, skips, and replacements and show row/field

@@ -1,4 +1,25 @@
-export const SCHEMA_VERSION = 3;
+import {
+  EVIDENCE_BASES,
+  REGISTER_KINDS,
+  REGISTER_STATUSES,
+  SEGMENT_LABELS,
+  TEAM_LIKELIHOODS,
+  WEAK_BASES,
+  assessInputQuality,
+  basisForClassification,
+  markdownTable,
+  parseWorkAreas,
+  participantReportLines,
+  qualityReportLines,
+  registerReportLines,
+  rollUpReportLines,
+  summarizeParticipantInputs,
+  tableCell,
+  workAreaKey
+} from "./assessment.js";
+
+export const SCHEMA_VERSION = 4;
+export const APP_VERSION = "4.0.0";
 
 export const CONFIDENCE_FACTORS = Object.freeze({
   Confirmed: 1,
@@ -16,7 +37,21 @@ const REQUIRED_COLLECTIONS = [
   "actions",
   "playbooks",
   "runs",
+  "participantInputs",
+  "registerItems",
   "snapshots"
+];
+// Added in schema 4. A workspace, snapshot, or import written before then has none,
+// which means empty; normalizeWorkspace() always supplies them.
+const OPTIONAL_COLLECTIONS = ["participantInputs", "registerItems"];
+const PURSUIT_SCOPED_COLLECTIONS = [
+  "criteria",
+  "evidence",
+  "competitors",
+  "actions",
+  "runs",
+  "participantInputs",
+  "registerItems"
 ];
 
 const SAFE_RECORD_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
@@ -167,6 +202,7 @@ function validateWorkspaceCandidate(candidate, context) {
   }
   for (const name of REQUIRED_COLLECTIONS) {
     if (candidate[name] === undefined) {
+      if (OPTIONAL_COLLECTIONS.includes(name)) continue;
       if (
         context.requireCurrentCollections ||
         (context.requireSnapshotCollections && name !== "snapshots")
@@ -210,12 +246,20 @@ function validateWorkspaceCandidate(candidate, context) {
     if (!nonEmpty(pursuit.name) || !nonEmpty(pursuit.customer)) {
       errors.push(`${recordPath} requires name and customer.`);
     }
+    if (
+      pursuit.workAreas !== undefined &&
+      (!Array.isArray(pursuit.workAreas) ||
+        pursuit.workAreas.length > 30 ||
+        pursuit.workAreas.some(item => typeof item !== "string" || item.length > 200))
+    ) {
+      errors.push(`${recordPath}.workAreas must be a list of up to 30 short names.`);
+    }
   }
 
   const recordsByCollection = Object.fromEntries(
-    ["criteria", "evidence", "competitors", "actions", "runs"].map(name => [name, new Map()])
+    PURSUIT_SCOPED_COLLECTIONS.map(name => [name, new Map()])
   );
-  for (const name of ["criteria", "evidence", "competitors", "actions", "runs"]) {
+  for (const name of PURSUIT_SCOPED_COLLECTIONS) {
     for (const [index, record] of collections[name].entries()) {
       const recordPath = `${path}.${name}[${index}]`;
       if (!isRecordObject(record)) {
@@ -433,6 +477,62 @@ function validateWorkspaceCandidate(candidate, context) {
       ) {
         errors.push(`${recordPath} has a nonreciprocal criterion link.`);
       }
+    }
+  }
+
+  const competitorById = recordsByCollection.competitors;
+  const checkCompetitorLink = (record, recordPath) => {
+    if (record.competitorId === undefined || record.competitorId === "") return;
+    if (!isSafeRecordId(record.competitorId)) {
+      errors.push(`${recordPath}.competitorId must be a safe relationship ID.`);
+      return;
+    }
+    const competitor = competitorById.get(record.competitorId);
+    if (!competitor) errors.push(`${recordPath} references a missing competitor.`);
+    else if (competitor.pursuitId !== record.pursuitId) {
+      errors.push(`${recordPath} references a competitor from another pursuit.`);
+    }
+  };
+  for (const [index, input] of collections.participantInputs.entries()) {
+    if (!isRecordObject(input)) continue;
+    const recordPath = `${path}.participantInputs[${index}]`;
+    if (!nonEmpty(input.participant)) errors.push(`${recordPath} requires a participant.`);
+    if (!nonEmpty(input.competitorName) && !nonEmpty(input.competitorId)) {
+      errors.push(`${recordPath} requires a competitor.`);
+    }
+    if (
+      input.rank !== undefined &&
+      input.rank !== "" &&
+      !(Number.isInteger(Number(input.rank)) && Number(input.rank) >= 1 && Number(input.rank) <= 99)
+    ) {
+      errors.push(`${recordPath} has an invalid rank.`);
+    }
+    if (input.segment && !SEGMENT_LABELS.includes(input.segment)) {
+      errors.push(`${recordPath} has an unsupported label.`);
+    }
+    if (input.confidence && !["High", "Medium", "Low"].includes(input.confidence)) {
+      errors.push(`${recordPath} has an unsupported confidence.`);
+    }
+    if (input.basis && !EVIDENCE_BASES.includes(input.basis)) {
+      errors.push(`${recordPath} has an unsupported evidence basis.`);
+    }
+    checkCompetitorLink(input, recordPath);
+  }
+  for (const [index, item] of collections.registerItems.entries()) {
+    if (!isRecordObject(item)) continue;
+    const recordPath = `${path}.registerItems[${index}]`;
+    if (!Object.prototype.hasOwnProperty.call(REGISTER_KINDS, item.kind)) {
+      errors.push(`${recordPath} has an unsupported register type.`);
+    }
+    if (!nonEmpty(item.title)) errors.push(`${recordPath} requires a title.`);
+    if (item.status && !REGISTER_STATUSES.includes(item.status)) {
+      errors.push(`${recordPath} has an unsupported status.`);
+    }
+    checkCompetitorLink(item, recordPath);
+  }
+  for (const [index, evidence] of collections.evidence.entries()) {
+    if (isRecordObject(evidence) && evidence.basis && !EVIDENCE_BASES.includes(evidence.basis)) {
+      errors.push(`${path}.evidence[${index}] has an unsupported evidence basis.`);
     }
   }
 
@@ -967,7 +1067,7 @@ export function normalizeWorkspace(candidate, fallback) {
         );
   }
   workspace.schemaVersion = SCHEMA_VERSION;
-  workspace.appVersion = "3.0.0";
+  workspace.appVersion = APP_VERSION;
   workspace.createdAt = source.createdAt || base.createdAt || new Date().toISOString();
   workspace.updatedAt = source.updatedAt || base.updatedAt || workspace.createdAt;
   workspace.active =
@@ -988,9 +1088,14 @@ export function normalizeWorkspace(candidate, fallback) {
     procurementContext: "",
     priorEstimate: 50,
     archived: false,
+    exampleText: "",
     ...item,
     priorEstimate: clampPriorEstimate(item.priorEstimate),
-    archived: Boolean(item.archived)
+    archived: Boolean(item.archived),
+    workAreas: parseWorkAreas(Array.isArray(item.workAreas) ? item.workAreas : []),
+    // The scenario estimate is opt-in per pursuit: a Black Hat compares competitors by
+    // work area, and a single win number invites the shortcut the session avoids.
+    showScenarioEstimate: item.showScenarioEstimate === true
   }));
   workspace.criteria = workspace.criteria.map(item => ({
     category: "Technical",
@@ -1001,6 +1106,7 @@ export function normalizeWorkspace(candidate, fallback) {
     rationale: "",
     evidenceIds: [],
     isGate: false,
+    workArea: "",
     ...item,
     evidenceIds: asStringArray(item.evidenceIds),
     isGate: Boolean(item.isGate)
@@ -1018,9 +1124,13 @@ export function normalizeWorkspace(candidate, fallback) {
     attachmentName: "",
     attachmentType: "",
     attachmentData: "",
+    locator: "",
     ...item,
     citation: item.citation || `E-${String(index + 1).padStart(3, "0")}`,
-    criterionIds: asStringArray(item.criterionIds)
+    criterionIds: asStringArray(item.criterionIds),
+    basis: EVIDENCE_BASES.includes(item.basis)
+      ? item.basis
+      : basisForClassification(item.classification || "Hypothesis")
   }));
   workspace.competitors = workspace.competitors.map(item => ({
     position: "Challenger",
@@ -1034,7 +1144,15 @@ export function normalizeWorkspace(candidate, fallback) {
     classification: "Hypothesis",
     evidenceIds: [],
     scores: {},
+    aliases: "",
+    vehiclePosition: "",
+    mostLikelyPlay: "",
+    mostDangerousPlay: "",
+    teamHypothesis: "",
+    teamLikelihood: "Unknown",
+    teamSource: "",
     ...item,
+    teamLikelihood: TEAM_LIKELIHOODS.includes(item.teamLikelihood) ? item.teamLikelihood : "Unknown",
     incumbent: Boolean(item.incumbent),
     evidenceIds: asStringArray(item.evidenceIds),
     scores: item.scores && typeof item.scores === "object" ? { ...item.scores } : {}
@@ -1045,6 +1163,31 @@ export function normalizeWorkspace(candidate, fallback) {
     status: "Open",
     priority: "Medium",
     finding: "",
+    workArea: "",
+    evidencePath: "",
+    ...item
+  }));
+  workspace.participantInputs = workspace.participantInputs.map(item => ({
+    workArea: "",
+    rank: "",
+    competitorId: "",
+    competitorName: "",
+    segment: "",
+    confidence: "",
+    basis: "",
+    rationale: "",
+    source: "",
+    gap: "",
+    ...item
+  }));
+  workspace.registerItems = workspace.registerItems.map(item => ({
+    competitorId: "",
+    workArea: "",
+    detail: "",
+    response: "",
+    level: "",
+    owner: "",
+    status: "Open",
     ...item
   }));
   workspace.playbooks = workspace.playbooks.map(item => ({
@@ -1235,6 +1378,70 @@ export function calculateCompetitiveScores(workspace, pursuitId) {
   };
 }
 
+// Scores each work area separately: the area's own criteria plus the cross-cutting
+// criteria (no work area). A work area with no criteria of its own has no ranking.
+export function calculateWorkAreaScores(workspace, pursuitId) {
+  const pursuit = workspace.pursuits.find(item => item.id === pursuitId);
+  if (!pursuit) return [];
+  const criteria = workspace.criteria.filter(item => item.pursuitId === pursuitId);
+  const areas = [...(Array.isArray(pursuit.workAreas) ? pursuit.workAreas : [])];
+  const keys = new Set(areas.map(workAreaKey));
+  for (const criterion of criteria) {
+    const key = workAreaKey(criterion.workArea);
+    if (key && !keys.has(key)) {
+      keys.add(key);
+      areas.push(criterion.workArea);
+    }
+  }
+  return areas.map(workArea => {
+    const key = workAreaKey(workArea);
+    const own = criteria.filter(item => workAreaKey(item.workArea) === key);
+    if (!own.length) {
+      return {
+        workArea,
+        criteriaCount: 0,
+        ranking: [],
+        leader: null,
+        leaders: [],
+        us: null,
+        strongestCompetitor: null,
+        margin: null
+      };
+    }
+    const included = new Set(
+      criteria.filter(item => !workAreaKey(item.workArea) || own.includes(item)).map(item => item.id)
+    );
+    const view = {
+      ...workspace,
+      criteria: workspace.criteria.filter(
+        item => item.pursuitId !== pursuitId || included.has(item.id)
+      )
+    };
+    const result = calculateCompetitiveScores(view, pursuitId);
+    const ranking = [result.us, ...result.competitors]
+      .filter(item => item.cpi !== null)
+      .sort((a, b) => b.cpi - a.cpi || a.name.localeCompare(b.name))
+      .map(item => ({
+        id: item.id,
+        name: item.name,
+        cpi: item.cpi,
+        coverage: item.coverage,
+        confidence: item.confidence,
+        isUs: item.id === "us"
+      }));
+    return {
+      workArea,
+      criteriaCount: own.length,
+      ranking,
+      leader: ranking[0] || null,
+      leaders: ranking.filter(item => item.cpi === ranking[0]?.cpi),
+      us: result.us,
+      strongestCompetitor: result.strongestCompetitor,
+      margin: result.margin
+    };
+  });
+}
+
 export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
   const pursuit = workspace.pursuits.find(item => item.id === pursuitId);
   if (!pursuit) throw new Error("The selected pursuit no longer exists.");
@@ -1294,6 +1501,21 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
               : "Severe disadvantage";
 
   const date = localDate();
+  const workAreaScores = calculateWorkAreaScores(workspace, pursuitId);
+  const participantSummary = summarizeParticipantInputs(workspace, pursuitId);
+  const qualityFindings = assessInputQuality(workspace, pursuitId, {
+    participants: session.participants || ""
+  });
+  const showScenario = pursuit.showScenarioEstimate === true;
+  const workAreas = Array.isArray(pursuit.workAreas) ? pursuit.workAreas : [];
+  const crossCutting = criteria.filter(item => !workAreaKey(item.workArea));
+  const competitorById = new Map(competitors.map(item => [item.id, item]));
+  const evidenceBasisCounts = EVIDENCE_BASES.map(basis => [
+    basis,
+    evidence.filter(item => evidenceBasis(item) === basis).length
+  ]).filter(([, count]) => count);
+  const scoredAreas = workAreaScores.filter(item => item.ranking.length);
+  const inputAreas = participantSummary.areas.filter(item => item.top.length);
   const lines = [
     `# Black Hat Competitive Analysis: ${pursuit.name}`,
     "",
@@ -1303,18 +1525,49 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
     `**Facilitator:** ${session.facilitator || "Public workspace facilitator"}`,
     `**Participants:** ${session.participants || "Not recorded"}`,
     `**Customer:** ${pursuit.customer}`,
-    `**Competitive posture:** ${relativePosture}`,
-    scores.scenarioEstimate
-      ? `**Scenario win estimate:** ${scores.scenarioEstimate.value}% (${scores.scenarioEstimate.low}-${scores.scenarioEstimate.high}% uncertainty range; planning estimate, not a forecast)`
-      : `**Scenario win estimate:** Not available until our team and at least one competitor have scored criteria`,
+    `**Work areas:** ${workAreas.length ? workAreas.join("; ") : "None defined; competitors are compared as a single field"}`,
+    `**Overall competitive posture (all work areas combined):** ${relativePosture}`,
+    !showScenario
+      ? "**Scenario win estimate:** Off for this pursuit (a planning estimate, not a forecast; enable it in Opportunity only if the team wants it)"
+      : scores.scenarioEstimate
+        ? `**Scenario win estimate:** ${scores.scenarioEstimate.value}% (${scores.scenarioEstimate.low}-${scores.scenarioEstimate.high}% uncertainty range; planning estimate, not a forecast)`
+        : `**Scenario win estimate:** Not available until our team and at least one competitor have scored criteria`,
     "",
     "> This is a deterministic analysis of user-entered judgments and evidence. It does not perform web research, verify claims, or call an AI model.",
     "",
     "## 1. Executive summary",
+    ...(scoredAreas.length
+      ? scoredAreas.map(
+          item =>
+            `- **${item.workArea}:** ${
+              item.leaders.length > 1
+                ? `${joinNames(item.leaders.map(entry => entry.name))} tie for the lead on entered scores (${item.leader.cpi}/100)`
+                : `${item.leader.name} leads the entered scores (${item.leader.cpi}/100)`
+            }${
+              item.us && item.us.cpi !== null
+                ? item.leader.isUs && item.leaders.length === 1
+                  ? `; our margin over ${item.strongestCompetitor?.name || "the field"} is ${signed(item.margin)} points`
+                  : item.leaders.some(entry => entry.isUs)
+                    ? ""
+                    : `; our team is at ${item.us.cpi}/100`
+                : "; our team is not scored here"
+            }.`
+        )
+      : [
+          workAreas.length
+            ? "- No work area has its own scored criteria yet, so the comparison by work area is not available."
+            : "- No work areas are defined. Add them in Opportunity to compare competitors by order type rather than as one field."
+        ]),
+    ...inputAreas.map(
+      item =>
+        `- **${item.workArea || "Unassigned"} (participants):** ${item.top
+          .map(top => `${top.name} (${top.firstPicks} first pick${top.firstPicks === 1 ? "" : "s"})`)
+          .join(", then ")}${item.disagreements.length ? `; ${item.disagreements.length} disagreement${item.disagreements.length === 1 ? "" : "s"} to resolve` : ""}.`
+    ),
     scores.us.cpi !== null
-      ? `Our Competitive Position Index is **${scores.us.cpi}/100** with **${scores.us.coverage}% evidence coverage** and **${scores.us.confidence}% confidence**. ${
+      ? `Across all work areas combined, our Competitive Position Index is **${scores.us.cpi}/100** with **${scores.us.coverage}% evidence coverage** and **${scores.us.confidence}% confidence**. ${
           scores.strongestCompetitor
-            ? `${scores.strongestCompetitor.name} is the strongest scored competitor at **${scores.strongestCompetitor.cpi}/100**, producing a margin of **${signed(scores.margin)} points**.`
+            ? `${scores.strongestCompetitor.name} is the strongest scored competitor overall at **${scores.strongestCompetitor.cpi}/100** (margin **${signed(scores.margin)} points**). Read the work-area comparison before the overall index.`
             : "No competitor has been scored, so a relative ranking is not available."
         }`
       : scores.totalWeight
@@ -1329,6 +1582,9 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
           .map(item => item.criterion.name)
           .join(", ")}.`
       : "No scored vulnerability exceeds the configured comparison threshold.",
+    qualityFindings.some(item => item.severity === "warning")
+      ? `Input quality: ${qualityFindings.filter(item => item.severity === "warning").length} warning(s) need attention before the findings are relied on (section 17).`
+      : "Input quality: no warnings.",
     "",
     "## 2. Opportunity and customer priorities",
     pursuit.summary || "No opportunity summary has been entered.",
@@ -1337,23 +1593,55 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
     "",
     ...criteria.map(
       item =>
-        `- **${item.name}** — weight ${item.weight}; our score ${displayScore(item.ourScore)}; ${item.classification}. ${item.description || ""} ${citation(item.evidenceIds)}`
+        `- **${item.name}** (${item.workArea || "all work areas"}) — weight ${item.weight}; our score ${displayScore(item.ourScore)}; ${item.classification}. ${item.description || ""} ${citation(item.evidenceIds)}`
     ),
     criteria.length ? "" : "- No evaluation criteria have been entered.",
     "## 3. Intelligence quality",
     `- Evidence records: ${evidence.length}`,
+    `- Evidence by basis: ${evidenceBasisCounts.length ? evidenceBasisCounts.map(([basis, count]) => `${basis} ${count}`).join("; ") : "none"}`,
     `- Weighted coverage: ${scores.us.coverage}%`,
     `- Weighted confidence: ${scores.us.confidence}%`,
-    scores.scenarioEstimate
+    showScenario && scores.scenarioEstimate
       ? `- Scenario estimate trust factor: ${scores.scenarioEstimate.trust}%`
-      : "- Scenario estimate trust factor: not available",
+      : "- Scenario estimate trust factor: not shown",
     `- Conflicting criteria: ${conflicts.length ? conflicts.map(item => item.name).join(", ") : "None identified"}`,
     `- Intelligence gaps: ${intelligenceGaps.length ? intelligenceGaps.map(item => item.name).join(", ") : "No structural gaps identified"}`,
     scores.normalized
       ? `- Entered weights total ${scores.totalWeight}; calculations normalize them to 100.`
       : "- Entered weights already total 100.",
     "",
-    "## 4. Competitive landscape",
+    "## 4. Work-area comparison",
+    workAreaScores.length
+      ? "Each work-area index uses that area's criteria plus the cross-cutting criteria. Compare competitors within a work area; the indexes are not comparable across areas."
+      : "No work areas are defined for this pursuit.",
+    "",
+    ...workAreaScores.flatMap(item => [
+      `### ${item.workArea}`,
+      item.ranking.length
+        ? markdownTable(
+            ["Rank", "Team", "Index", "Coverage", "Confidence"],
+            item.ranking.map((entry, index) => [
+              String(index + 1),
+              entry.name,
+              `${entry.cpi}/100`,
+              `${entry.coverage}%`,
+              `${entry.confidence}%`
+            ])
+          )
+        : `No criteria are assigned to ${item.workArea}. Assign criteria in Evaluation Criteria to score this work area.`,
+      ""
+    ]),
+    crossCutting.length && workAreaScores.length
+      ? `Cross-cutting criteria (apply to every work area): ${crossCutting.map(item => item.name).join(", ")}.`
+      : "",
+    "",
+    "## 5. Participant assessments and disagreement",
+    ...participantReportLines(participantSummary),
+    "",
+    "## 6. Work-area roll-up",
+    ...rollUpReportLines(participantSummary),
+    "",
+    "## 7. Competitive landscape",
     ...competitors.flatMap(competitor => {
       const score = scores.competitors.find(item => item.id === competitor.id);
       const top = criteria
@@ -1367,12 +1655,16 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
       return [
         `### ${competitor.name}`,
         `- Role: ${competitor.position}${competitor.incumbent ? "; incumbent" : ""}; bid likelihood: ${competitor.bidLikelihood}`,
-        `- CPI: ${
+        ...(competitor.vehiclePosition ? [`- Vehicle position: ${competitor.vehiclePosition}`] : []),
+        `- Overall index: ${
           score?.cpi === null || score?.cpi === undefined
             ? "Unknown (no scored criteria)"
             : `${score.cpi}/100`
         }; coverage: ${score?.coverage ?? 0}%; confidence: ${score?.confidence ?? 0}%`,
         `- Likely strategy (${competitor.classification}): ${competitor.strategy || `May emphasize ${top.map(item => item.name).join(" and ") || "its recorded strengths"}.`} ${citation(competitor.evidenceIds)}`,
+        `- Most likely play: ${competitor.mostLikelyPlay || "Not recorded"}`,
+        `- Most dangerous play: ${competitor.mostDangerousPlay || "Not recorded"}`,
+        `- Team hypothesis (${competitor.teamLikelihood || "Unknown"}): ${competitor.teamHypothesis || "Not recorded"}${competitor.teamSource ? `. Source: ${competitor.teamSource}` : ""}`,
         `- Strengths: ${competitor.strengths || "Not recorded"}`,
         `- Weaknesses: ${competitor.weaknesses || "Not recorded"}`,
         `- Candidate ghosting themes: ${competitor.ghosting || "Not recorded; treat any inferred theme as a hypothesis."}`,
@@ -1381,12 +1673,12 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
       ];
     }),
     competitors.length ? "" : "No competitors have been entered. This report is an intelligence-readiness assessment rather than a competitive ranking.\n",
-    "## 5. Weighted scoring matrix",
+    "## 8. Weighted scoring matrix",
     scoreMatrix(criteria, scores, competitors, citation),
     "",
-    "CPI is a deterministic 0-100 index, not a statistical win probability. Uncertain scores are shrunk toward neutral before weighting.",
+    "The overall index combines every work area. It is a deterministic 0-100 index, not a statistical win probability. Uncertain scores are shrunk toward neutral before weighting.",
     "",
-    "## 6. Relative strengths and vulnerabilities",
+    "## 9. Relative strengths and vulnerabilities",
     "### Advantages",
     ...(advantages.length
       ? advantages.map(
@@ -1408,7 +1700,7 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
       ? contested.map(item => `- **${item.criterion.name}:** scores are within 0.75 points.`)
       : ["- No fully scored criterion is currently classified as contested."]),
     "",
-    "## 7. Customer evaluator simulation",
+    "## 10. Customer evaluator simulation",
     ...criteria
       .slice()
       .sort((a, b) => positive(b.weight) - positive(a.weight))
@@ -1433,7 +1725,7 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
         )}`;
       }),
     criteria.length ? "" : "- Define weighted criteria to run this simulation.\n",
-    "## 8. Win themes and discriminator credibility",
+    "## 11. Win themes and discriminator credibility",
     ...(advantages.length
       ? advantages.map(
           item =>
@@ -1441,7 +1733,7 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
         )
       : ["- No evidence-supported scored advantage is ready to become a win theme."]),
     "",
-    "## 9. Counter-positioning and mitigation",
+    "## 12. Counter-positioning and mitigation",
     ...(vulnerabilities.length
       ? vulnerabilities.map(
           item =>
@@ -1452,7 +1744,17 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
       .filter(item => item.counterMoves)
       .map(item => `- Against **${item.name}:** ${item.counterMoves}`),
     "",
-    "## 10. Risks, assumptions, and intelligence gaps",
+    "## 13. Ghosting bank",
+    "Translate competitor weaknesses into neutral, evaluation-linked proposal language. Each ghost names the evidence an evaluator should demand.",
+    "",
+    ...registerReportLines(workspace, pursuitId, "ghost"),
+    "",
+    "## 14. Price posture by work area",
+    ...registerReportLines(workspace, pursuitId, "price"),
+    "",
+    "## 15. Risks, assumptions, and intelligence gaps",
+    ...registerReportLines(workspace, pursuitId, "risk"),
+    "",
     ...scores.gateWarnings.map(item => `- Critical gate: ${item} is currently scored below 3.`),
     ...conflicts.map(item => `- Conflicting evidence exists for ${item.name}; confidence is reduced.`),
     ...intelligenceGaps.map(
@@ -1463,18 +1765,26 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
       ? "- No structural risk flags were triggered; validate material judgments before use."
       : "",
     "",
-    "## 11. Prioritized action plan",
+    "## 16. Questions for the room",
+    ...registerReportLines(workspace, pursuitId, "question"),
+    "",
+    "## 17. Input quality checks",
+    ...qualityReportLines(qualityFindings),
+    "",
+    "## 18. Prioritized action plan",
     ...(actions.length
       ? actions
           .slice()
           .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority))
           .map(
             item =>
-              `- [${item.status === "Complete" ? "x" : " "}] **${item.priority}:** ${item.title} — ${item.owner || "Unassigned"}; due ${item.due || "TBD"}`
+              `- [${item.status === "Complete" ? "x" : " "}] **${item.priority}:** ${item.title} — ${item.owner || "Unassigned"}; due ${item.due || "TBD"}; evidence path: ${item.evidencePath || "not set"}${item.workArea ? `; work area: ${item.workArea}` : ""}`
           )
       : ["- Assign owners to close the highest-weight intelligence and proof gaps."]),
     "",
-    "## 12. Session record",
+    "Close the session only when each material issue has an owner, a due date, and an evidence path.",
+    "",
+    "## 19. Session record",
     `- Question: ${session.question || "Not recorded"}`,
     `- Participants: ${session.participants || "Not recorded"}`,
     `- Notes: ${session.notes || "Not recorded"}`,
@@ -1482,11 +1792,15 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
     "## Appendix A. Evidence register",
     ...evidence.map(
       item =>
-        `- **[${item.citation}] ${item.title}** — ${item.source}; ${item.classification}; ${item.confidence} confidence; stance: ${item.stance}. ${item.note}${item.url ? ` Source: ${item.url}` : ""}`
+        `- **[${item.citation}] ${item.title}** — ${item.source}${item.locator ? ` (${item.locator})` : ""}; ${evidenceBasis(item)}; ${item.confidence} confidence; stance: ${item.stance}. ${item.note}${item.url ? ` Source: ${item.url}` : ""}`
     ),
     evidence.length ? "" : "- No evidence records were entered.",
     "## Appendix B. Methodology",
-    "Scores use a 1-5 scale. Confidence factors are Confirmed 1.00, Inference 0.75, Hypothesis 0.50, Conflicting 0.35, and Missing 0.00. Effective scores shrink uncertain judgments toward neutral (3). Normalized weighted means are converted to a 0-100 Competitive Position Index.",
+    "Scores use a 1-5 scale. Confidence factors are Confirmed 1.00, Inference 0.75, Hypothesis 0.50, Conflicting 0.35, and Missing 0.00. Effective scores shrink uncertain judgments toward neutral (3). Normalized weighted means are converted to a 0-100 Competitive Position Index. A Confirmed judgment counts as Inference when it has no linked evidence, or when every linked source is a competitor claim, personal experience, or unknown.",
+    "",
+    "Work-area indexes repeat the same calculation using one work area's criteria plus the cross-cutting criteria. Participant inputs are ordered by first picks, then reciprocal-rank points, then mentions; disagreements are listed rather than averaged.",
+    "",
+    "Evidence basis: documented fact (a traceable source record), summary-stated (a summary's claim whose underlying record was not checked), claimed (the competitor's own assertion), inference, personal experience, or unknown.",
     "",
     "## Verification guardrail",
     "This output is a structured analysis of locally entered data, not an external intelligence product. Verify consequential claims, permissions, and classifications before use."
@@ -1509,6 +1823,7 @@ export function buildCompetitiveReport(workspace, pursuitId, session = {}) {
     reviewer: "",
     approvalNote: "",
     sourceHash: workspaceInputHash(workspace, pursuitId),
+    showScenarioEstimate: pursuit.showScenarioEstimate === true,
     scoreSummary: scores,
     sections,
     output,
@@ -1522,7 +1837,11 @@ export function workspaceInputHash(workspace, pursuitId) {
     criteria: workspace.criteria.filter(item => item.pursuitId === pursuitId),
     evidence: workspace.evidence.filter(item => item.pursuitId === pursuitId),
     competitors: workspace.competitors.filter(item => item.pursuitId === pursuitId),
-    actions: workspace.actions.filter(item => item.pursuitId === pursuitId)
+    actions: workspace.actions.filter(item => item.pursuitId === pursuitId),
+    participantInputs: (workspace.participantInputs || []).filter(
+      item => item.pursuitId === pursuitId
+    ),
+    registerItems: (workspace.registerItems || []).filter(item => item.pursuitId === pursuitId)
   });
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
@@ -1662,6 +1981,12 @@ function scoreSubject(
     const stances = new Set(linkedEvidence.map(item => item.stance));
     if (stances.has("Support") && stances.has("Challenge")) classification = "Conflicting";
     if (classification === "Confirmed" && !linkedEvidence.length) classification = "Inference";
+    if (
+      classification === "Confirmed" &&
+      linkedEvidence.every(item => WEAK_BASES.includes(item.basis))
+    ) {
+      classification = "Inference";
+    }
     const factor = rawScore === null ? 0 : CONFIDENCE_FACTORS[classification] ?? 0.5;
     const effectiveScore = rawScore === null ? 3 : 3 + (rawScore - 3) * factor;
     if (rawScore !== null) {
@@ -1715,6 +2040,17 @@ function inlineMarkdown(value) {
   return value
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\[(E-\d+)\]/g, "<code>[$1]</code>");
+}
+
+function joinNames(names) {
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function evidenceBasis(item) {
+  return EVIDENCE_BASES.includes(item?.basis)
+    ? item.basis
+    : basisForClassification(item?.classification || "Hypothesis");
 }
 
 function nonEmpty(value) {

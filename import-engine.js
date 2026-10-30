@@ -1,4 +1,17 @@
 import { validateWorkspace as defaultWorkspaceValidator } from "./engine.js";
+import {
+  EVIDENCE_BASES,
+  SEGMENT_LABELS,
+  TEAM_LIKELIHOODS,
+  classificationForBasis,
+  matchCompetitor,
+  normalizeBasis,
+  normalizeConfidence,
+  normalizeName,
+  normalizeSegment,
+  resolveWorkArea,
+  workAreaKey
+} from "./assessment.js";
 
 export const IMPORT_LIMITS = Object.freeze({
   maxRows: 2_000,
@@ -120,6 +133,9 @@ export const IMPORT_TARGETS = Object.freeze({
       field("isGate", "Critical gate", {
         type: "boolean",
         aliases: ["critical gate", "gate", "is gate", "mandatory"]
+      }),
+      field("workArea", "Work area", {
+        aliases: ["work area", "track work area", "area", "order type", "service area"]
       })
     ])
   }),
@@ -159,6 +175,15 @@ export const IMPORT_TARGETS = Object.freeze({
         type: "enum",
         options: ["High", "Medium", "Low"],
         aliases: ["confidence", "confidence level"]
+      }),
+      field("basis", "Evidence basis", {
+        type: "enum",
+        options: EVIDENCE_BASES,
+        normalize: normalizeBasis,
+        aliases: ["basis", "evidence basis", "source basis", "tag"]
+      }),
+      field("locator", "Locator", {
+        aliases: ["locator", "page", "section", "page or section", "reference"]
       }),
       field("classification", "Classification", {
         type: "enum",
@@ -229,6 +254,29 @@ export const IMPORT_TARGETS = Object.freeze({
         options: EVIDENCE_CLASSIFICATIONS,
         aliases: ["classification", "assessment classification"]
       }),
+      field("aliases", "Aliases", {
+        aliases: ["aliases", "alias", "other names", "also known as", "aka"]
+      }),
+      field("vehiclePosition", "Vehicle position", {
+        aliases: ["vehicle position", "vehicle", "contract vehicle", "seat"]
+      }),
+      field("mostLikelyPlay", "Most likely play", {
+        aliases: ["most likely play", "most likely", "likely play"]
+      }),
+      field("mostDangerousPlay", "Most dangerous play", {
+        aliases: ["most dangerous play", "most dangerous", "dangerous play"]
+      }),
+      field("teamHypothesis", "Team hypothesis", {
+        aliases: ["team hypothesis", "team", "teaming", "likely team"]
+      }),
+      field("teamLikelihood", "Team likelihood", {
+        type: "enum",
+        options: TEAM_LIKELIHOODS,
+        aliases: ["team likelihood", "teaming likelihood"]
+      }),
+      field("teamSource", "Team source", {
+        aliases: ["team source", "teaming source"]
+      }),
       field("evidenceRefs", "Supporting evidence", {
         type: "references",
         virtual: true,
@@ -297,6 +345,85 @@ export const IMPORT_TARGETS = Object.freeze({
       }),
       field("finding", "Finding or gap", {
         aliases: ["finding", "gap", "finding or gap", "reason", "description"]
+      }),
+      field("workArea", "Work area", {
+        aliases: ["work area", "area", "order type"]
+      }),
+      field("evidencePath", "Evidence path", {
+        aliases: ["evidence path", "how we will know", "evidence needed", "verification"]
+      })
+    ])
+  }),
+  participantInputs: Object.freeze({
+    key: "participantInputs",
+    label: "Participant inputs",
+    description:
+      "Import each participant's ranked competitors per work area. Blank participant and work-area cells repeat the row above, as session workbooks are usually laid out.",
+    replaceAllowed: true,
+    modes: Object.freeze(["append", "upsert", "replace"]),
+    fields: Object.freeze([
+      field("participant", "Participant", {
+        required: true,
+        fillDown: true,
+        aliases: ["participant", "participant name", "reviewer", "assessor", "name"]
+      }),
+      field("workArea", "Work area", {
+        fillDown: true,
+        aliases: ["work area", "track 2 work area", "track work area", "area", "order type"]
+      }),
+      field("rank", "Rank", {
+        type: "number",
+        aliases: ["rank", "pick", "order", "position"]
+      }),
+      field("competitorName", "Competitor", {
+        required: true,
+        aliases: [
+          "strongest competitor",
+          "competitor",
+          "competitor name",
+          "company",
+          "top competitor"
+        ]
+      }),
+      field("segment", "Label", {
+        type: "enum",
+        options: SEGMENT_LABELS,
+        normalize: normalizeSegment,
+        aliases: ["rating", "label", "segment", "segment label", "threat type"]
+      }),
+      field("confidence", "Confidence", {
+        type: "enum",
+        options: ["High", "Medium", "Low"],
+        normalize: normalizeConfidence,
+        aliases: ["confidence", "confidence level"]
+      }),
+      field("basis", "Evidence basis", {
+        type: "enum",
+        options: EVIDENCE_BASES,
+        normalize: normalizeBasis,
+        aliases: ["basis", "evidence basis", "evidence type", "evidence compared"]
+      }),
+      field("rationale", "Why", {
+        aliases: [
+          "evidence and justification",
+          "justification",
+          "why",
+          "assessment",
+          "rationale",
+          "why strongest"
+        ]
+      }),
+      field("source", "Source", {
+        aliases: ["source", "source file", "source filename", "citation", "experience basis"]
+      }),
+      field("gap", "What changes the view", {
+        aliases: [
+          "gap or what changes our view",
+          "what changes our view",
+          "gap",
+          "missing or conflicting evidence",
+          "uncertainty"
+        ]
       })
     ])
   })
@@ -325,7 +452,8 @@ const RECORD_DEFAULTS = Object.freeze({
     classification: "Hypothesis",
     rationale: "",
     evidenceIds: [],
-    isGate: false
+    isGate: false,
+    workArea: ""
   }),
   evidence: Object.freeze({
     type: "Customer",
@@ -338,7 +466,9 @@ const RECORD_DEFAULTS = Object.freeze({
     criterionIds: [],
     attachmentName: "",
     attachmentType: "",
-    attachmentData: ""
+    attachmentData: "",
+    basis: "Inference",
+    locator: ""
   }),
   competitors: Object.freeze({
     position: "Challenger",
@@ -351,14 +481,35 @@ const RECORD_DEFAULTS = Object.freeze({
     counterMoves: "",
     classification: "Hypothesis",
     evidenceIds: [],
-    scores: {}
+    scores: {},
+    aliases: "",
+    vehiclePosition: "",
+    mostLikelyPlay: "",
+    mostDangerousPlay: "",
+    teamHypothesis: "",
+    teamLikelihood: "Unknown",
+    teamSource: ""
   }),
   actions: Object.freeze({
     owner: "",
     due: "",
     status: "Open",
     priority: "Medium",
-    finding: ""
+    finding: "",
+    workArea: "",
+    evidencePath: ""
+  }),
+  participantInputs: Object.freeze({
+    workArea: "",
+    rank: "",
+    competitorId: "",
+    competitorName: "",
+    segment: "",
+    confidence: "",
+    basis: "",
+    rationale: "",
+    source: "",
+    gap: ""
   })
 });
 
@@ -641,6 +792,14 @@ export function buildImportPlan({
   const seenInputKeys = new Set();
   const sourceRowOffset =
     Number.isInteger(rowNumberOffset) && rowNumberOffset >= 1 ? rowNumberOffset : 1;
+  // Session workbooks write the participant and work area once and leave the rows
+  // below blank; those columns carry the last value down.
+  const fillDownColumns = metadata.fields
+    .filter(definition => definition.fillDown && resolvedMapping[definition.key] !== undefined)
+    .map(definition => ({ key: definition.key, column: resolvedMapping[definition.key] }));
+  const carried = new Map();
+  let filledCells = 0;
+  const rankCounters = new Map();
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
     const sourceRow = rows[rowIndex];
     const rowNumber = rowIndex + sourceRowOffset + 1;
@@ -649,16 +808,39 @@ export function buildImportPlan({
       continue;
     }
     summary.processedRows += 1;
+    let effectiveRow = sourceRow;
+    if (fillDownColumns.length) {
+      effectiveRow = Array.isArray(sourceRow) ? sourceRow.slice() : { ...sourceRow };
+      for (const column of fillDownColumns) {
+        const raw = getCell(sourceRow, headers, column.column);
+        if (!isBlank(raw)) carried.set(column.key, raw);
+        else if (carried.has(column.key)) {
+          setCell(effectiveRow, headers, column.column, carried.get(column.key));
+          filledCells += 1;
+        }
+      }
+    }
     const beforeErrorCount = diagnostics.filter(item => item.severity === "error").length;
     const parsed = parseMappedRow(
       metadata,
       headers,
-      sourceRow,
+      effectiveRow,
       resolvedMapping,
       rowNumber,
       diagnostics
     );
     if (diagnostics.filter(item => item.severity === "error").length > beforeErrorCount) continue;
+    if (["criteria", "actions", "participantInputs"].includes(target) && parsed.present.has("workArea")) {
+      parsed.values.workArea = resolveWorkArea(parsed.values.workArea, selectedPursuit?.workAreas || []);
+    }
+    if (target === "participantInputs" && isBlank(parsed.values.rank)) {
+      // Without a rank column, row order within a participant's work area is the rank.
+      const key = `${normalizeIdentity(parsed.values.participant)}\u0000${workAreaKey(parsed.values.workArea)}`;
+      const rank = (rankCounters.get(key) || 0) + 1;
+      rankCounters.set(key, rank);
+      parsed.values.rank = rank;
+      parsed.present.add("rank");
+    }
 
     if (target === "competitorScores") {
       importScoreRow({
@@ -689,6 +871,15 @@ export function buildImportPlan({
       seenInputKeys,
       freshId
     });
+  }
+
+  if (filledCells) {
+    addDiagnostic(
+      diagnostics,
+      "warning",
+      "filled_down",
+      `${filledCells} blank ${filledCells === 1 ? "cell was" : "cells were"} filled from the row above (participant or work area). Check the preview before applying.`
+    );
   }
 
   if (!hasErrors(diagnostics)) {
@@ -886,7 +1077,10 @@ function parseFieldValue(definition, raw, rowNumber, diagnostics) {
     }
   }
   if (definition.type === "enum" && text) {
-    const match = definition.options.find(option => normalizeHeader(option) === normalizeHeader(text));
+    const candidate = (typeof definition.normalize === "function" && definition.normalize(text)) || text;
+    const match = definition.options.find(
+      option => normalizeHeader(option) === normalizeHeader(candidate)
+    );
     if (!match) {
       addDiagnostic(
         diagnostics,
@@ -941,6 +1135,21 @@ function validateTargetValues(target, values, rowNumber, diagnostics) {
         "ourScore"
       );
     }
+  }
+  if (
+    target === "participantInputs" &&
+    values.rank !== "" &&
+    values.rank !== undefined &&
+    (!Number.isInteger(values.rank) || values.rank < 1 || values.rank > 99)
+  ) {
+    addDiagnostic(
+      diagnostics,
+      "error",
+      "invalid_rank",
+      "Rank must be a whole number from 1 to 99 or blank.",
+      rowNumber,
+      "rank"
+    );
   }
   if (
     target === "competitorScores" &&
@@ -1044,6 +1253,7 @@ function importRecordRow({
   if (existing && mode === "upsert") {
     const patch = materialValues(target, values, present);
     Object.assign(existing, patch);
+    deriveDependentValues(target, existing, present);
     applyResolvedReferences(workspace, target, existing, referenceResult);
     summary.updated += 1;
     pushPreview(preview, {
@@ -1066,6 +1276,7 @@ function importRecordRow({
   };
   if (target !== "pursuits") record.pursuitId = effectivePursuitId;
   if (target === "evidence") record.citation = nextEvidenceCitation(workspace, effectivePursuitId);
+  deriveDependentValues(target, record, present);
   applyResolvedReferences(workspace, target, record, referenceResult);
   workspace[target].push(record);
   summary.created += 1;
@@ -1169,6 +1380,14 @@ function importScoreRow({
   });
 }
 
+// An imported evidence basis sets the classification used by scoring, unless the row
+// also maps a classification explicitly.
+function deriveDependentValues(target, record, present) {
+  if (target === "evidence" && present.has("basis") && !present.has("classification") && record.basis) {
+    record.classification = classificationForBasis(record.basis);
+  }
+}
+
 function materialValues(target, values, present) {
   const output = {};
   const metadata = IMPORT_TARGETS[target];
@@ -1216,6 +1435,23 @@ function resolveRecordReferences(workspace, target, values, pursuitId, rowNumber
       "evidenceRefs",
       diagnostics
     );
+  }
+  if (target === "participantInputs") {
+    const competitors = workspace.competitors.filter(item => item.pursuitId === pursuitId);
+    const match = matchCompetitor(values.competitorName, competitors);
+    result.competitorId = match.competitor?.id || "";
+    if (!match.competitor) {
+      addDiagnostic(
+        diagnostics,
+        "warning",
+        match.ambiguous ? "ambiguous_competitor" : "unmatched_competitor",
+        match.ambiguous
+          ? `"${values.competitorName}" matches more than one competitor; it was imported unlinked.`
+          : `"${values.competitorName}" does not match a competitor in this pursuit; it was imported unlinked. Add it as an alias on the right competitor.`,
+        rowNumber,
+        "competitorName"
+      );
+    }
   }
   result.valid = !diagnostics.some(
     item => item.severity === "error" && item.row === rowNumber
@@ -1282,6 +1518,7 @@ function applyResolvedReferences(workspace, target, record, references) {
   if (target === "competitors" && references.evidenceIds) {
     record.evidenceIds = [...references.evidenceIds];
   }
+  if (target === "participantInputs") record.competitorId = references.competitorId || "";
 }
 
 function reconcileReciprocalLinks(workspace) {
@@ -1336,6 +1573,19 @@ function findMatchingRecords(workspace, target, values, pursuitId) {
         `${normalizeIdentity(item.title)}\u0000${normalizeIdentity(item.source)}` === key
     );
   }
+  if (target === "participantInputs") {
+    const competitors = workspace.competitors.filter(item => item.pursuitId === pursuitId);
+    const matchedId = matchCompetitor(values.competitorName, competitors).competitor?.id || "";
+    const competitorKey = normalizeName(values.competitorName);
+    return collection.filter(
+      item =>
+        item.pursuitId === pursuitId &&
+        normalizeIdentity(item.participant) === normalizeIdentity(values.participant) &&
+        workAreaKey(item.workArea) === workAreaKey(values.workArea) &&
+        (normalizeName(item.competitorName) === competitorKey ||
+          (matchedId && item.competitorId === matchedId))
+    );
+  }
   const identityField = target === "actions" ? "title" : "name";
   const identity = normalizeIdentity(values[identityField]);
   return collection.filter(
@@ -1353,6 +1603,13 @@ function logicalKey(target, values) {
       normalizeReference(values.citation) ||
       `${normalizeIdentity(values.title)}\u0000${normalizeIdentity(values.source)}`
     );
+  }
+  if (target === "participantInputs") {
+    return [
+      normalizeIdentity(values.participant),
+      workAreaKey(values.workArea),
+      normalizeName(values.competitorName)
+    ].join("\u0000");
   }
   return normalizeIdentity(values[target === "actions" ? "title" : "name"]);
 }
@@ -1392,6 +1649,16 @@ function removeScopedRecords(workspace, target, pursuitId) {
     }
     return removedIds.size;
   }
+  if (target === "competitors") {
+    const removedIds = new Set(
+      workspace.competitors.filter(item => item.pursuitId === pursuitId).map(item => item.id)
+    );
+    for (const name of ["participantInputs", "registerItems"]) {
+      for (const record of workspace[name] || []) {
+        if (removedIds.has(record.competitorId)) record.competitorId = "";
+      }
+    }
+  }
   const removed = workspace[target].filter(item => item.pursuitId === pursuitId).length;
   workspace[target] = workspace[target].filter(item => item.pursuitId !== pursuitId);
   return removed;
@@ -1406,7 +1673,9 @@ function createIdAllocator(workspace, idFactory, diagnostics) {
     "competitors",
     "actions",
     "playbooks",
-    "runs"
+    "runs",
+    "participantInputs",
+    "registerItems"
   ]) {
     for (const record of workspace[collectionName] || []) {
       if (record?.id) used.add(String(record.id));
@@ -1525,6 +1794,14 @@ function cellToText(value) {
   return String(value).trim();
 }
 
+function setCell(row, headers, columnIndex, value) {
+  if (Array.isArray(row) || Object.prototype.hasOwnProperty.call(row, columnIndex)) {
+    row[columnIndex] = value;
+  } else {
+    row[headers[columnIndex]] = value;
+  }
+}
+
 function getCell(row, headers, columnIndex) {
   if (Array.isArray(row)) return row[columnIndex];
   if (row && typeof row === "object") {
@@ -1629,13 +1906,17 @@ function singularTarget(target) {
     criteria: "criterion",
     evidence: "evidence record",
     competitors: "competitor",
-    actions: "action"
+    actions: "action",
+    participantInputs: "participant input"
   }[target];
 }
 
 function displayIdentity(target, values) {
   if (target === "pursuits") return `${values.name} / ${values.customer}`;
   if (target === "evidence") return values.citation || values.title;
+  if (target === "participantInputs") {
+    return `${values.participant} / ${values.workArea || "no work area"} / ${values.competitorName}`;
+  }
   return values[target === "actions" ? "title" : "name"];
 }
 
